@@ -17,13 +17,7 @@ mongoose.connect(process.env.MONGODB_URI)
 // Middleware
 app.use(express.json());
 app.use(cors());
-app.use('/auth', authRoutes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
-});
+app.use('/api/auth', authRoutes);
 
 
 
