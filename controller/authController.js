@@ -121,7 +121,7 @@ const authController = {
 
       const onboardingRequired = user.isFirstLogin;
 
-      res.json({
+      res.status(200).json({
         token,
         user: {
           id: user._id,
@@ -371,6 +371,38 @@ const authController = {
         .json({ message: "Onboarding failed", error: error.message });
     }
   },
+  // Add this to controllers/auth.controller.js
+
+/**
+ * Logs out a user by invalidating their session
+ */
+logout: async (req, res) => {
+  try {
+    const { userId } = req.user; // From auth middleware
+    
+    // Find user in MongoDB
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // You may want to add any tokens to a blacklist in a production environment
+    // This could be implemented with Redis or another fast storage solution
+    
+    // Optionally update the last logout time
+    user.lastLogout = new Date();
+    await user.save();
+
+    res.status(200).json({ message: "Logout successful" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      message: "Logout failed",
+      error: error.message,
+    });
+  }
+}
 };
+
 
 module.exports = authController;
