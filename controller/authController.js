@@ -371,8 +371,7 @@ const authController = {
         .json({ message: "Onboarding failed", error: error.message });
     }
   },
-};
-// Add this to controllers/auth.controller.js
+  // Add this to controllers/auth.controller.js
 
 /**
  * Logs out a user by invalidating their session
@@ -403,5 +402,7 @@ logout: async (req, res) => {
     });
   }
 }
+};
+
 
 module.exports = authController;

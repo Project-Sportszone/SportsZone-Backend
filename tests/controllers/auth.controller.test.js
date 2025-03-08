@@ -36,6 +36,11 @@ describe('Auth Controller', () => {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
+    admin.auth = jest.fn().mockReturnValue({
+      getUser: jest.fn().mockResolvedValue({ uid: 'firebaseUid123' }),
+      updateUser: jest.fn().mockResolvedValue({}),
+      createCustomToken: jest.fn().mockResolvedValue('custom-token'),
+    });
   });
 
   describe('signup', () => {
@@ -316,9 +321,6 @@ describe('Auth Controller', () => {
       
       User.findOne.mockResolvedValue(mockUser);
       hashPassword.mockResolvedValue('newHashedPassword');
-      
-      admin.auth().getUser = jest.fn().mockResolvedValue({ uid: 'firebaseUid123' });
-      admin.auth().updateUser = jest.fn().mockResolvedValue({});
     });
 
     it('should reset password successfully', async () => {
@@ -329,6 +331,7 @@ describe('Auth Controller', () => {
         resetPasswordToken: req.body.token,
         resetPasswordExpires: { $gt: expect.any(Number) },
       });
+      expect(admin.auth).toHaveBeenCalled();
       expect(admin.auth().getUser).toHaveBeenCalledWith('firebaseUid123');
       expect(admin.auth().updateUser).toHaveBeenCalledWith(
         'firebaseUid123',
@@ -349,6 +352,7 @@ describe('Auth Controller', () => {
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         message: 'Invalid or expired reset token',
       }));
+      expect(admin.auth).not.toHaveBeenCalled();
     });
   });
 
