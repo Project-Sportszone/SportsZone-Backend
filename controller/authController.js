@@ -11,6 +11,15 @@ const User = require("../models/userModel");
 const { hashPassword, comparePassword } = require("../utils/password_utils");
 const { generateToken } = require("../config/jwt_config");
 
+// Define valid sports and roles
+const VALID_SPORTS = ["Cricket", "Football", "Volleyball", "Badminton"];
+const VALID_ROLES = {
+  Cricket: ["Batsman", "Bowler", "All-rounder", "Wicketkeeper"],
+  Football: ["Striker", "Midfielder", "Defender", "Goalkeeper"],
+  Volleyball: ["Setter", "Spiker", "Libero"],
+  Badminton: ["Singles Player", "Doubles Player"],
+};
+
 const authController = {
   signup: async (req, res) => {
     try {
@@ -47,6 +56,7 @@ const authController = {
         isEmailVerified: false,
         sports: [],
         isFirstLogin: true,
+        onboardingStep: 0, // 0: Not started, 1: Sports selection, 2: Confirmation, 3: Completed
       });
 
       await user.save();
@@ -61,6 +71,8 @@ const authController = {
         message: "User created successfully. Please verify your email.",
         token,
         userId: firebaseUser.uid,
+        onboardingRequired: true,
+        currentStep: 0,
       });
     } catch (error) {
       console.error("Signup error:", error);
@@ -119,7 +131,9 @@ const authController = {
         await user.save();
       }
 
+      // Determine if onboarding is required
       const onboardingRequired = user.isFirstLogin;
+      const currentStep = user.onboardingStep || 0;
 
       res.status(200).json({
         token,
@@ -133,11 +147,157 @@ const authController = {
           sports: user.sports,
         },
         onboardingRequired,
+        currentStep,
       });
     } catch (error) {
       console.error("Login error:", error);
       res.status(401).json({
         message: "Login failed",
+        error: error.message,
+      });
+    }
+  },
+
+  // Check onboarding status
+  checkOnboardingStatus: async (req, res) => {
+    try {
+      const { userId } = req.user;
+      
+      // Find user in MongoDB
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({
+        onboardingRequired: user.isFirstLogin,
+        currentStep: user.onboardingStep || 0,
+        isEmailVerified: user.isEmailVerified
+      });
+    } catch (error) {
+      console.error("Onboarding status check error:", error);
+      res.status(500).json({
+        message: "Failed to check onboarding status",
+        error: error.message,
+      });
+    }
+  },
+  
+  // Start the onboarding process
+  startOnboarding: async (req, res) => {
+    try {
+      const { userId } = req.user;
+      
+      // Find user in MongoDB
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Verify email first
+      if (!user.isEmailVerified) {
+        return res.status(403).json({
+          message: "Please verify your email before starting onboarding",
+          verified: false
+        });
+      }
+      
+      // Start onboarding if not already started
+      if (user.onboardingStep === 0) {
+        user.onboardingStep = 1; // Step 1: Sports selection
+        await user.save();
+      }
+      
+      res.json({
+        message: "Onboarding started",
+        currentStep: user.onboardingStep
+      });
+    } catch (error) {
+      console.error("Start onboarding error:", error);
+      res.status(500).json({
+        message: "Failed to start onboarding",
+        error: error.message,
+      });
+    }
+  },
+  
+  // Update onboarding steps
+  updateOnboardingStep: async (req, res) => {
+    try {
+      const { userId } = req.user;
+      const { step, selectedSports, complete } = req.body;
+      
+      // Find user in MongoDB
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Validate step sequence
+      if (user.onboardingStep !== step) {
+        return res.status(400).json({ message: "Invalid step sequence" });
+      }
+      
+      // Step 1: Sports selection
+      if (step === 1 && selectedSports) {
+        // Validate sports and roles
+        const validSelectedSports = selectedSports.filter(
+          (s) => VALID_SPORTS.includes(s.name) && VALID_ROLES[s.name].includes(s.role)
+        );
+        
+        if (validSelectedSports.length === 0) {
+          return res.status(400).json({ message: "Invalid sports or roles selected" });
+        }
+        
+        // Update user's sports preferences
+        user.sports = validSelectedSports;
+        user.onboardingStep = 2; // Move to Step 2: Confirmation
+        await user.save();
+        
+        return res.json({
+          message: "Sports preferences saved",
+          currentStep: 2
+        });
+      }
+      
+      // Step 2: Complete onboarding
+      if (step === 2 && complete) {
+        // Finalize onboarding
+        user.isFirstLogin = false;
+        user.onboardingStep = 3; // Onboarding completed
+        await user.save();
+        
+        return res.json({
+          message: "Onboarding completed successfully",
+          onboardingRequired: false
+        });
+      }
+      
+      // Invalid step update
+      return res.status(400).json({ message: "Invalid step data" });
+    } catch (error) {
+      console.error("Update onboarding step error:", error);
+      res.status(500).json({
+        message: "Failed to update onboarding step",
+        error: error.message,
+      });
+    }
+  },
+  
+  // Get available sports options
+  getSportsOptions: async (req, res) => {
+    try {
+      // Format sports options for frontend
+      const sportsOptions = VALID_SPORTS.map(sport => ({
+        name: sport,
+        roles: VALID_ROLES[sport]
+      }));
+      
+      res.json({ sports: sportsOptions });
+    } catch (error) {
+      console.error("Get sports options error:", error);
+      res.status(500).json({
+        message: "Failed to get sports options",
         error: error.message,
       });
     }
@@ -247,6 +407,8 @@ const authController = {
       res.json({
         message: "Email verified successfully",
         verified: true,
+        onboardingRequired: user.isFirstLogin,
+        currentStep: user.onboardingStep
       });
     } catch (error) {
       console.error("Email verification error:", error);
@@ -334,18 +496,14 @@ const authController = {
     }
   },
 
+  // Legacy onboarding method (now replaced by multi-step process)
   onboarding: async (req, res) => {
     try {
       const { userId } = req.user;
       const { sports } = req.body;
 
-      const validSports = ["Cricket", "Football", "Volleyball", "Badminton"];
-      const validRoles = {
-        Cricket: ["Batsman", "Bowler", "All-rounder", "Wicketkeeper"],
-        Football: ["Striker", "Midfielder", "Defender", "Goalkeeper"],
-        Volleyball: ["Setter", "Spiker", "Libero"],
-        Badminton: ["Singles Player", "Doubles Player"],
-      };
+      const validSports = VALID_SPORTS;
+      const validRoles = VALID_ROLES;
 
       const assignedSports = sports.filter(
         (s) =>
@@ -361,6 +519,7 @@ const authController = {
       await User.findByIdAndUpdate(userId, {
         sports: assignedSports,
         isFirstLogin: false,
+        onboardingStep: 3 // Completed
       });
 
       res.json({ message: "Onboarding completed successfully" });
@@ -371,38 +530,33 @@ const authController = {
         .json({ message: "Onboarding failed", error: error.message });
     }
   },
-  // Add this to controllers/auth.controller.js
 
-/**
- * Logs out a user by invalidating their session
- */
-logout: async (req, res) => {
-  try {
-    const { userId } = req.user; // From auth middleware
-    
-    // Find user in MongoDB
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+  logout: async (req, res) => {
+    try {
+      const { userId } = req.user; // From auth middleware
+      
+      // Find user in MongoDB
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // You may want to add any tokens to a blacklist in a production environment
+      // This could be implemented with Redis or another fast storage solution
+      
+      // Optionally update the last logout time
+      user.lastLogout = new Date();
+      await user.save();
+
+      res.status(200).json({ message: "Logout successful" });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({
+        message: "Logout failed",
+        error: error.message,
+      });
     }
-
-    // You may want to add any tokens to a blacklist in a production environment
-    // This could be implemented with Redis or another fast storage solution
-    
-    // Optionally update the last logout time
-    user.lastLogout = new Date();
-    await user.save();
-
-    res.status(200).json({ message: "Logout successful" });
-  } catch (error) {
-    console.error("Logout error:", error);
-    res.status(500).json({
-      message: "Logout failed",
-      error: error.message,
-    });
   }
-}
 };
-
 
 module.exports = authController;
