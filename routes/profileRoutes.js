@@ -8,6 +8,8 @@ const authenticateToken = require('../middleware/auth_middleware');
 
 // Get user profile
 router.get('/',authenticateToken,profileController.getProfile);
+router.get('/players', authenticateToken, profileController.getAllPlayers);
+
 router.get('/:id', authenticateToken, profileController.getProfileById);
 // Update profile information
 router.put('/update',authenticateToken, profileController.updateProfile);

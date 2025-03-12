@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
   firebaseUid: { type: String, required: true },
   sports: [
     {
-      name: {
+      sport_name: {
         type: String,
         enum: ["Cricket", "Football", "Volleyball", "Badminton"],
       },

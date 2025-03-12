@@ -265,7 +265,7 @@ const authController = {
       if (step === 1 && selectedSports) {
         // Validate sports and roles
         const validSelectedSports = selectedSports.filter(
-          (s) => VALID_SPORTS.includes(s.name) && VALID_ROLES[s.name].includes(s.role)
+          (s) => VALID_SPORTS.includes(s.sport_name) && VALID_ROLES[s.sport_name].includes(s.role)
         );
         
         if (validSelectedSports.length === 0) {
@@ -530,7 +530,7 @@ const authController = {
 
       const assignedSports = sports.filter(
         (s) =>
-          validSports.includes(s.name) && validRoles[s.name].includes(s.role)
+          validSports.includes(s.sport_name) && validRoles[s.sport_name].includes(s.role)
       );
 
       if (assignedSports.length === 0) {

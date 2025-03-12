@@ -147,6 +147,7 @@ const profileController = {
         profile: {
           id: user._id,
           name: user.name,
+          email:user.email,
           location: user.location,
           profilePicture: profilePicUrl,
           sports: sports,
@@ -240,7 +241,121 @@ const profileController = {
       });
     }
   },
+// Add this function to your profileController
 
+// Get all players (paginated)
+getAllPlayers: async (req, res) => {
+  try {
+    // Extract query parameters for pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    // Extract filter parameters
+    const sportFilter = req.query.sport;
+    const roleFilter = req.query.role;
+    const locationFilter = req.query.location;
+    const nameFilter = req.query.name;
+    
+    // Build query object
+    let query = {};
+    
+    // Apply filters if provided
+    if (sportFilter) {
+      query["sports.name"] = sportFilter;
+    }
+    
+    if (roleFilter && sportFilter) {
+      query["sports"] = { 
+        $elemMatch: { 
+          name: sportFilter, 
+          role: roleFilter 
+        } 
+      };
+    }
+    
+    if (locationFilter) {
+      query.location = { $regex: locationFilter, $options: 'i' };
+    }
+    
+    if (nameFilter) {
+      query.name = { $regex: nameFilter, $options: 'i' };
+    }
+    
+    // Count total matching documents for pagination info
+    const totalPlayers = await User.countDocuments(query);
+    
+    // Fetch paginated players
+    const players = await User.find(query)
+      .select('_id name email location sports firebaseUid')
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    // Get profile pictures from Firebase for all players
+    const playersWithDetails = await Promise.all(
+      players.map(async (player) => {
+        try {
+          // Get Firebase user for profile picture URL
+          const firebaseUser = await admin.auth().getUser(player.firebaseUid);
+          const profilePicUrl = firebaseUser.photoURL || null;
+          
+          // Map sports with static statistics
+          const sports = player.sports.map((sport) => {
+            // Get static statistics for this sport and role
+            const stats = STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
+              ? STATIC_STATS[sport.name][sport.role]
+              : {};
+            
+            return {
+              ...sport,
+              statistics: stats,
+            };
+          });
+          // Return player data with profile picture
+          return {
+            id: player._id,
+            name: player.name,
+            email:player.email,
+            location: player.location,
+            profilePicture: profilePicUrl,
+            sports: sports,
+          };
+        } catch (error) {
+          console.error(`Error getting details for player ${player._id}:`, error);
+          // Return player without Firebase details if there's an error
+          return {
+            id: player._id,
+            name: player.name,
+            email:player.email,
+
+            location: player.location,
+            profilePicture: null,
+            sports: player.sports,
+          };
+        }
+      })
+    );
+    
+    // Return paginated results with pagination info
+    res.status(200).json({
+      players: playersWithDetails,
+      pagination: {
+        total: totalPlayers,
+        page,
+        limit,
+        totalPages: Math.ceil(totalPlayers / limit),
+        hasMore: page < Math.ceil(totalPlayers / limit)
+      }
+    });
+  } catch (error) {
+    console.error("Get all players error:", error);
+    res.status(500).json({
+      message: "Failed to get players",
+      error: error.message,
+    });
+  }
+},
   // Update profile information
   updateProfile: async (req, res) => {
     try {
