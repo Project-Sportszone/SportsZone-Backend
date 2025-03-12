@@ -14,6 +14,7 @@ router.get("/profile", authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });
 
-router.post("/onboarding", authMiddleware, authController.onboarding);
+
+
 
 module.exports = router;

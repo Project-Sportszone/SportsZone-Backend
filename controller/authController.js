@@ -136,7 +136,7 @@ const authController = {
       const currentStep = user.onboardingStep || 0;
 
       res.status(200).json({
-        token,
+        token,firebaseToken,
         user: {
           id: user._id,
           name: user.name,
@@ -186,16 +186,22 @@ const authController = {
   // Start the onboarding process
   startOnboarding: async (req, res) => {
     try {
+      console.log("Start onboarding called with user:", JSON.stringify(req.user));
       const { userId } = req.user;
       
+      console.log("Finding user with ID:", userId);
       // Find user in MongoDB
       const user = await User.findById(userId);
       if (!user) {
+        console.log("User not found with ID:", userId);
         return res.status(404).json({ message: "User not found" });
       }
       
+      console.log("User found:", user.email, "Current step:", user.onboardingStep);
+      
       // Verify email first
       if (!user.isEmailVerified) {
+        console.log("Email not verified for user:", user.email);
         return res.status(403).json({
           message: "Please verify your email before starting onboarding",
           verified: false
@@ -204,13 +210,30 @@ const authController = {
       
       // Start onboarding if not already started
       if (user.onboardingStep === 0) {
+        console.log("Updating onboarding step to 1 for user:", user.email);
         user.onboardingStep = 1; // Step 1: Sports selection
-        await user.save();
+        
+        try {
+          const savedUser = await user.save();
+          console.log("User saved successfully. New onboarding step:", savedUser.onboardingStep);
+        } catch (saveError) {
+          console.error("Error saving user:", saveError);
+          return res.status(500).json({
+            message: "Failed to update onboarding step",
+            error: saveError.message
+          });
+        }
+      } else {
+        console.log("User already in onboarding step:", user.onboardingStep);
       }
+      
+      // Verify the step was updated by fetching the user again
+      const updatedUser = await User.findById(userId);
+      console.log("Double-check - User step after save:", updatedUser.onboardingStep);
       
       res.json({
         message: "Onboarding started",
-        currentStep: user.onboardingStep
+        currentStep: updatedUser.onboardingStep
       });
     } catch (error) {
       console.error("Start onboarding error:", error);
