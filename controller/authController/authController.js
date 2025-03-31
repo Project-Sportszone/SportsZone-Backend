@@ -1,5 +1,5 @@
 // controllers/auth.controller.js
-const { admin, auth } = require("../config/firebase-config");
+const { admin, auth } = require("../../config/firebase-config");
 const {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -7,9 +7,9 @@ const {
   sendPasswordResetEmail,
   updatePassword,
 } = require("firebase/auth");
-const User = require("../models/userModel");
-const { hashPassword, comparePassword } = require("../utils/password_utils");
-const { generateToken } = require("../config/jwt_config");
+const User = require("../../models/userModel/userModel");
+const { hashPassword, comparePassword } = require("../../utils/password_utils");
+const { generateToken } = require("../../config/jwt_config");
 
 // Define valid sports and roles
 const VALID_SPORTS = ["Cricket", "Football", "Volleyball", "Badminton"];
@@ -326,81 +326,77 @@ const authController = {
     }
   },
 
-  forgotPassword: async (req, res) => {
-    try {
-      const { email } = req.body;
+// Initiate password reset
+forgotPassword: async (req, res) => {
+  try {
+    const { email } = req.body;
 
-      // Find user in MongoDB
-      const user = await User.findOne({ email });
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Send password reset email using Firebase
-      await sendPasswordResetEmail(auth, email);
-
-      // Generate reset token
-      const resetToken = generateToken({ userId: user._id });
-
-      // Update user with reset token
-      user.resetPasswordToken = resetToken;
-      user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
-      await user.save();
-
-      res.json({
-        message: "Password reset email sent successfully",
-        resetToken,
-      });
-    } catch (error) {
-      console.error("Forgot password error:", error);
-      res.status(400).json({
-        message: "Failed to send reset email",
-        error: error.message,
+    // Find user in MongoDB
+    const user = await User.findOne({ email });
+    if (!user) {
+      // For security reasons, don't reveal if user exists or not
+      return res.status(200).json({ 
+        message: "If your email is registered, you will receive a password reset link shortly" 
       });
     }
-  },
 
-  resetPassword: async (req, res) => {
-    try {
-      const { token, newPassword } = req.body;
+    // Send password reset email using Firebase
+    await sendPasswordResetEmail(auth, email, {
+      url: `${process.env.FRONTEND_URL}/reset-password`, // URL to your reset password page
+      handleCodeInApp: true,
+    });
 
-      // Find user with valid reset token
-      const user = await User.findOne({
-        resetPasswordToken: token,
-        resetPasswordExpires: { $gt: Date.now() },
-      });
+    res.status(200).json({
+      message: "If your email is registered, you will receive a password reset link shortly"
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({
+      message: "Failed to process reset request",
+      error: error.message,
+    });
+  }
+},
 
-      if (!user) {
-        return res
-          .status(400)
-          .json({ message: "Invalid or expired reset token" });
-      }
+// Complete password reset with code (oobCode) from email
+// Modify your resetPassword function
+resetPassword: async (req, res) => {
+  try {
+    const { oobCode, newPassword } = req.body;
 
-      // Update Firebase password
-      const firebaseUser = await admin.auth().getUser(user.firebaseUid);
-      await admin.auth().updateUser(user.firebaseUid, {
-        password: newPassword,
-      });
-
-      // Hash new password for MongoDB
-      const hashedPassword = await hashPassword(newPassword);
-
-      // Update MongoDB password and clear reset token
-      user.password = hashedPassword;
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpires = undefined;
-      await user.save();
-
-      res.json({ message: "Password reset successful" });
-    } catch (error) {
-      console.error("Reset password error:", error);
-      res.status(400).json({
-        message: "Failed to reset password",
-        error: error.message,
-      });
+    if (!oobCode || !newPassword) {
+      return res.status(400).json({ message: "Reset code and new password are required" });
     }
-  },
 
+    // Verify the oobCode with Firebase
+    const verificationResult = await admin.auth().verifyPasswordResetCode(oobCode);
+    const email = verificationResult;
+
+    // Find the user in MongoDB
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Confirm the password reset in Firebase
+    await admin.auth().confirmPasswordReset(oobCode, newPassword);
+
+    // Hash the new password for MongoDB
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update MongoDB password
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password reset successful" });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(400).json({
+      message: "Failed to reset password",
+      error: error.message,
+    });
+  }
+},
   verifyEmail: async (req, res) => {
     try {
       const { token } = req.params;

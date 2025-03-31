@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const authController = require("../controller/authController");
-const authenticateUser = require("../middleware/auth_middleware");
+const authController = require("../../controller/authController/authController");
+const authenticateUser = require("../../middleware/auth_middleware");
 
 router.get('/status', authenticateUser, authController.checkOnboardingStatus);
 router.post('/start', authenticateUser, authController.startOnboarding);

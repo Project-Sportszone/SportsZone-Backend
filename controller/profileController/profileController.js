@@ -1,6 +1,5 @@
-// controllers/profile.controller.js
-const User = require("../models/userModel");
-const { admin } = require("../config/firebase-config");
+const User = require("../../models/userModel/userModel");
+const { admin } = require("../../config/firebase-config");
 
 // Define valid sports and roles (using the same constants from auth.controller)
 const VALID_SPORTS = ["Cricket", "Football", "Volleyball", "Badminton"];

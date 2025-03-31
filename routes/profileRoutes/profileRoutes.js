@@ -1,8 +1,8 @@
 // routes/profile.routes.js
 const express = require('express');
 const router = express.Router();
-const profileController = require('../controller/profileController');
-const authenticateToken = require('../middleware/auth_middleware');
+const profileController = require('../../controller/profileController/profileController');
+const authenticateToken = require('../../middleware/auth_middleware');
 
 // Apply authentication middleware to all profile routes
 
