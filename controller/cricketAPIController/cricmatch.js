@@ -1,4 +1,4 @@
-const { Match, MatchConstants } = require("../../models/cricketModel/matchModel");
+const { Match, MatchConstants } = require("../../models/cricketModel/match");
 const Team = require("../../models/cricketModel/teams");
 const User = require("../../models/userModel/userModel");
 
