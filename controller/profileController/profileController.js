@@ -132,9 +132,10 @@ const profileController = {
       // Get sports with static statistics
       const sports = user.sports.map((sport) => {
         // Get static statistics for this sport and role
-        const stats = STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
-          ? STATIC_STATS[sport.name][sport.role]
-          : {};
+        const stats =
+          STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
+            ? STATIC_STATS[sport.name][sport.role]
+            : {};
 
         return {
           ...sport,
@@ -146,7 +147,7 @@ const profileController = {
         profile: {
           id: user._id,
           name: user.name,
-          email:user.email,
+          email: user.email,
           location: user.location,
           profilePicture: profilePicUrl,
           sports: sports,
@@ -177,9 +178,10 @@ const profileController = {
       // Get sports with static statistics
       const sports = user.sports.map((sport) => {
         // Get static statistics for this sport and role
-        const stats = STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
-          ? STATIC_STATS[sport.name][sport.role]
-          : {};
+        const stats =
+          STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
+            ? STATIC_STATS[sport.name][sport.role]
+            : {};
 
         return {
           ...sport,
@@ -228,9 +230,9 @@ const profileController = {
         photoURL: photoURL,
       });
 
-      res.status(200).json({ 
+      res.status(200).json({
         message: "Profile picture updated successfully",
-        photoURL: photoURL
+        photoURL: photoURL,
       });
     } catch (error) {
       console.error("Update profile picture error:", error);
@@ -240,121 +242,124 @@ const profileController = {
       });
     }
   },
-// Add this function to your profileController
+  // Add this function to your profileController
 
-// Get all players (paginated)
-getAllPlayers: async (req, res) => {
-  try {
-    // Extract query parameters for pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    
-    // Extract filter parameters
-    const sportFilter = req.query.sport;
-    const roleFilter = req.query.role;
-    const locationFilter = req.query.location;
-    const nameFilter = req.query.name;
-    
-    // Build query object
-    let query = {};
-    
-    // Apply filters if provided
-    if (sportFilter) {
-      query["sports.name"] = sportFilter;
-    }
-    
-    if (roleFilter && sportFilter) {
-      query["sports"] = { 
-        $elemMatch: { 
-          name: sportFilter, 
-          role: roleFilter 
-        } 
-      };
-    }
-    
-    if (locationFilter) {
-      query.location = { $regex: locationFilter, $options: 'i' };
-    }
-    
-    if (nameFilter) {
-      query.name = { $regex: nameFilter, $options: 'i' };
-    }
-    
-    // Count total matching documents for pagination info
-    const totalPlayers = await User.countDocuments(query);
-    
-    // Fetch paginated players
-    const players = await User.find(query)
-      .select('_id name email location sports firebaseUid')
-      .skip(skip)
-      .limit(limit)
-      .lean();
-    
-    // Get profile pictures from Firebase for all players
-    const playersWithDetails = await Promise.all(
-      players.map(async (player) => {
-        try {
-          // Get Firebase user for profile picture URL
-          const firebaseUser = await admin.auth().getUser(player.firebaseUid);
-          const profilePicUrl = firebaseUser.photoURL || null;
-          
-          // Map sports with static statistics
-          const sports = player.sports.map((sport) => {
-            // Get static statistics for this sport and role
-            const stats = STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
-              ? STATIC_STATS[sport.name][sport.role]
-              : {};
-            
-            return {
-              ...sport,
-              statistics: stats,
-            };
-          });
-          // Return player data with profile picture
-          return {
-            id: player._id,
-            name: player.name,
-            email:player.email,
-            location: player.location,
-            profilePicture: profilePicUrl,
-            sports: sports,
-          };
-        } catch (error) {
-          console.error(`Error getting details for player ${player._id}:`, error);
-          // Return player without Firebase details if there's an error
-          return {
-            id: player._id,
-            name: player.name,
-            email:player.email,
+  // Get all players (paginated)
+  getAllPlayers: async (req, res) => {
+    try {
+      // Extract query parameters for pagination
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
 
-            location: player.location,
-            profilePicture: null,
-            sports: player.sports,
-          };
-        }
-      })
-    );
-    
-    // Return paginated results with pagination info
-    res.status(200).json({
-      players: playersWithDetails,
-      pagination: {
-        total: totalPlayers,
-        page,
-        limit,
-        totalPages: Math.ceil(totalPlayers / limit),
-        hasMore: page < Math.ceil(totalPlayers / limit)
+      // Extract filter parameters
+      const sportFilter = req.query.sport;
+      const roleFilter = req.query.role;
+      const locationFilter = req.query.location;
+      const nameFilter = req.query.name;
+
+      // Build query object
+      let query = {};
+
+      // Apply filters if provided
+      // if (sportFilter) {
+      //   query["sports"] = {
+      //     $elemMatch: { sport_name: sportFilter },
+      //   };
+      // }
+
+      // if (sportFilter || roleFilter) {
+      //   query["sports"] = { $elemMatch: {} };
+      //   if (sportFilter) query["sports"].$elemMatch.sport_name = sportFilter;
+      //   if (roleFilter) query["sports"].$elemMatch.role = roleFilter;
+      // }
+
+      if (locationFilter) {
+        query["location"] = { $regex: locationFilter, $options: "i" }; // Case insensitive
       }
-    });
-  } catch (error) {
-    console.error("Get all players error:", error);
-    res.status(500).json({
-      message: "Failed to get players",
-      error: error.message,
-    });
-  }
-},
+
+      if (nameFilter) {
+        query["name"] = { $regex: nameFilter, $options: "i" };
+      }
+
+      // Count total matching documents for pagination info
+      const totalPlayers = await User.countDocuments(query);
+
+      // Fetch paginated players
+      const players = await User.find(query)
+        .select("_id name email location sports firebaseUid")
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      // Get profile pictures from Firebase for all players
+      const playersWithDetails = await Promise.all(
+        players.map(async (player) => {
+          try {
+            // Get Firebase user for profile picture URL
+            const firebaseUser = await admin.auth().getUser(player.firebaseUid);
+            const profilePicUrl = firebaseUser.photoURL || null;
+
+            // Map sports with static statistics
+            const sports = player.sports.map((sport) => {
+              // Get static statistics for this sport and role
+              const stats =
+                STATIC_STATS[sport.name] && STATIC_STATS[sport.name][sport.role]
+                  ? STATIC_STATS[sport.name][sport.role]
+                  : {};
+
+              return {
+                ...sport,
+                statistics: stats,
+              };
+            });
+            // Return player data with profile picture
+            return {
+              id: player._id,
+              name: player.name,
+              email: player.email,
+              location: player.location,
+              profilePicture: profilePicUrl,
+              sports: sports,
+            };
+          } catch (error) {
+            console.error(
+              `Error getting details for player ${player._id}:`,
+              error
+            );
+            // Return player without Firebase details if there's an error
+            return {
+              id: player._id,
+              name: player.name,
+              email: player.email,
+
+              location: player.location,
+              profilePicture: null,
+              sports: player.sports,
+            };
+          }
+        })
+      );
+
+      // Return paginated results with pagination info
+      res.status(200).json({
+        players: playersWithDetails,
+        pagination: {
+          total: totalPlayers,
+          page,
+          limit,
+          totalPages: Math.ceil(totalPlayers / limit),
+          hasMore: page < Math.ceil(totalPlayers / limit),
+        },
+      });
+    } catch (error) {
+      console.error("Get all players error:", error);
+      res.status(500).json({
+        message: "Failed to get players",
+        error: error.message,
+      });
+    }
+  },
   // Update profile information
   updateProfile: async (req, res) => {
     try {
@@ -410,7 +415,9 @@ getAllPlayers: async (req, res) => {
 
       // Validate sport and role
       if (!sportName || !sportRole) {
-        return res.status(400).json({ message: "Sport name and role are required" });
+        return res
+          .status(400)
+          .json({ message: "Sport name and role are required" });
       }
 
       if (!VALID_SPORTS.includes(sportName)) {
@@ -418,7 +425,9 @@ getAllPlayers: async (req, res) => {
       }
 
       if (!VALID_ROLES[sportName].includes(sportRole)) {
-        return res.status(400).json({ message: "Invalid role for selected sport" });
+        return res
+          .status(400)
+          .json({ message: "Invalid role for selected sport" });
       }
 
       // Find user in MongoDB
@@ -427,23 +436,26 @@ getAllPlayers: async (req, res) => {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Check if sport already exists
+      // Check if the user already has the same sport and role
       const sportExists = user.sports.some(
-        (s) => s.name === sportName && s.role === sportRole
+        (s) => s.sport_name === sportName && s.role === sportRole
       );
 
       if (sportExists) {
-        return res.status(400).json({ message: "Sport already added to profile" });
+        return res
+          .status(400)
+          .json({ message: "Sport with this role already exists in profile" });
       }
 
-      // Add new sport
-      user.sports.push({ name: sportName, role: sportRole });
+      // Add new entry to sports array
+      user.sports.push({ sport_name: sportName, role: sportRole });
       await user.save();
 
       // Get static statistics for this sport and role
-      const stats = STATIC_STATS[sportName] && STATIC_STATS[sportName][sportRole]
-        ? STATIC_STATS[sportName][sportRole]
-        : {};
+      const stats =
+        STATIC_STATS[sportName] && STATIC_STATS[sportName][sportRole]
+          ? STATIC_STATS[sportName][sportRole]
+          : {};
 
       res.status(200).json({
         message: "Sport added successfully",
@@ -470,7 +482,9 @@ getAllPlayers: async (req, res) => {
 
       // Validate inputs
       if (!sportName || !sportRole) {
-        return res.status(400).json({ message: "Sport name and role are required" });
+        return res
+          .status(400)
+          .json({ message: "Sport name and role are required" });
       }
 
       // Find user in MongoDB
@@ -481,7 +495,7 @@ getAllPlayers: async (req, res) => {
 
       // Find sport in user's sports array
       const sportIndex = user.sports.findIndex(
-        (s) => s.name === sportName && s.role === sportRole
+        (s) => s.sport_name === sportName && s.role === sportRole
       );
 
       if (sportIndex === -1) {
@@ -509,11 +523,11 @@ getAllPlayers: async (req, res) => {
   getSportsOptions: async (req, res) => {
     try {
       // Format sports options for frontend
-      const sportsOptions = VALID_SPORTS.map(sport => ({
+      const sportsOptions = VALID_SPORTS.map((sport) => ({
         name: sport,
-        roles: VALID_ROLES[sport]
+        roles: VALID_ROLES[sport],
       }));
-      
+
       res.json({ sports: sportsOptions });
     } catch (error) {
       console.error("Get sports options error:", error);
@@ -538,17 +552,20 @@ getAllPlayers: async (req, res) => {
 
       // Check if user has this sport
       const hasSport = user.sports.some(
-        (s) => s.name === sportName && s.role === sportRole
+        (s) => s.sport_name === sportName && s.role === sportRole
       );
 
       if (!hasSport) {
-        return res.status(404).json({ message: "Sport not found in user profile" });
+        return res
+          .status(404)
+          .json({ message: "Sport not found in user profile" });
       }
 
       // Get static statistics for this sport and role
-      const stats = STATIC_STATS[sportName] && STATIC_STATS[sportName][sportRole]
-        ? STATIC_STATS[sportName][sportRole]
-        : {};
+      const stats =
+        STATIC_STATS[sportName] && STATIC_STATS[sportName][sportRole]
+          ? STATIC_STATS[sportName][sportRole]
+          : {};
 
       res.status(200).json({
         sport: {

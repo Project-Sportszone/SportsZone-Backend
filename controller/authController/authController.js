@@ -9,7 +9,7 @@ const {
 } = require("firebase/auth");
 const User = require("../../models/userModel/userModel");
 const { hashPassword, comparePassword } = require("../../utils/password_utils");
-const { generateToken } = require("../../config/jwt_config");
+const { generateToken, verifyToken } = require("../../config/jwt_config");
 
 // Define valid sports and roles
 const VALID_SPORTS = ["Cricket", "Football", "Volleyball", "Badminton"];
@@ -116,7 +116,7 @@ const authController = {
       }
 
       // Generate Firebase token
-      const firebaseToken = await firebaseUser.getIdToken();
+      const firebaseToken = await firebaseUser.getIdToken(true);
 
       // Generate JWT token
       const token = generateToken({
@@ -136,7 +136,8 @@ const authController = {
       const currentStep = user.onboardingStep || 0;
 
       res.status(200).json({
-        token,firebaseToken,
+        token,
+        firebaseToken,
         user: {
           id: user._id,
           name: user.name,
@@ -162,17 +163,17 @@ const authController = {
   checkOnboardingStatus: async (req, res) => {
     try {
       const { userId } = req.user;
-      
+
       // Find user in MongoDB
       const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       res.json({
         onboardingRequired: user.isFirstLogin,
         currentStep: user.onboardingStep || 0,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
       });
     } catch (error) {
       console.error("Onboarding status check error:", error);
@@ -182,13 +183,16 @@ const authController = {
       });
     }
   },
-  
+
   // Start the onboarding process
   startOnboarding: async (req, res) => {
     try {
-      console.log("Start onboarding called with user:", JSON.stringify(req.user));
+      console.log(
+        "Start onboarding called with user:",
+        JSON.stringify(req.user)
+      );
       const { userId } = req.user;
-      
+
       console.log("Finding user with ID:", userId);
       // Find user in MongoDB
       const user = await User.findById(userId);
@@ -196,44 +200,55 @@ const authController = {
         console.log("User not found with ID:", userId);
         return res.status(404).json({ message: "User not found" });
       }
-      
-      console.log("User found:", user.email, "Current step:", user.onboardingStep);
-      
+
+      console.log(
+        "User found:",
+        user.email,
+        "Current step:",
+        user.onboardingStep
+      );
+
       // Verify email first
       if (!user.isEmailVerified) {
         console.log("Email not verified for user:", user.email);
         return res.status(403).json({
           message: "Please verify your email before starting onboarding",
-          verified: false
+          verified: false,
         });
       }
-      
+
       // Start onboarding if not already started
       if (user.onboardingStep === 0) {
         console.log("Updating onboarding step to 1 for user:", user.email);
         user.onboardingStep = 1; // Step 1: Sports selection
-        
+
         try {
           const savedUser = await user.save();
-          console.log("User saved successfully. New onboarding step:", savedUser.onboardingStep);
+          console.log(
+            "User saved successfully. New onboarding step:",
+            savedUser.onboardingStep
+          );
         } catch (saveError) {
           console.error("Error saving user:", saveError);
           return res.status(500).json({
             message: "Failed to update onboarding step",
-            error: saveError.message
+            error: saveError.message,
           });
         }
       } else {
         console.log("User already in onboarding step:", user.onboardingStep);
       }
-      
+
       // Verify the step was updated by fetching the user again
       const updatedUser = await User.findById(userId);
-      console.log("Double-check - User step after save:", updatedUser.onboardingStep);
-      
+      console.log(
+        "Double-check - User step after save:",
+        updatedUser.onboardingStep
+      );
+
       res.json({
         message: "Onboarding started",
-        currentStep: updatedUser.onboardingStep
+        currentStep: updatedUser.onboardingStep,
       });
     } catch (error) {
       console.error("Start onboarding error:", error);
@@ -243,59 +258,63 @@ const authController = {
       });
     }
   },
-  
+
   // Update onboarding steps
   updateOnboardingStep: async (req, res) => {
     try {
       const { userId } = req.user;
       const { step, selectedSports, complete } = req.body;
-      
+
       // Find user in MongoDB
       const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       // Validate step sequence
       if (user.onboardingStep !== step) {
         return res.status(400).json({ message: "Invalid step sequence" });
       }
-      
+
       // Step 1: Sports selection
       if (step === 1 && selectedSports) {
         // Validate sports and roles
         const validSelectedSports = selectedSports.filter(
-          (s) => VALID_SPORTS.includes(s.sport_name) && VALID_ROLES[s.sport_name].includes(s.role)
+          (s) =>
+            VALID_SPORTS.includes(s.sport_name) &&
+            VALID_ROLES[s.sport_name].includes(s.role)
         );
-        
+
         if (validSelectedSports.length === 0) {
-          return res.status(400).json({ message: "Invalid sports or roles selected" });
+          return res
+            .status(400)
+            .json({ message: "Invalid sports or roles selected" });
         }
-        
+
         // Update user's sports preferences
         user.sports = validSelectedSports;
         user.onboardingStep = 2; // Move to Step 2: Confirmation
         await user.save();
-        
+
         return res.json({
           message: "Sports preferences saved",
-          currentStep: 2
+          currentStep: 2,
         });
       }
-      
+
       // Step 2: Complete onboarding
       if (step === 2 && complete) {
         // Finalize onboarding
         user.isFirstLogin = false;
         user.onboardingStep = 3; // Onboarding completed
         await user.save();
-        
+
         return res.json({
           message: "Onboarding completed successfully",
-          onboardingRequired: false
+          onboardingRequired: false,
         });
       }
-      
+
       // Invalid step update
       return res.status(400).json({ message: "Invalid step data" });
     } catch (error) {
@@ -306,16 +325,16 @@ const authController = {
       });
     }
   },
-  
+
   // Get available sports options
   getSportsOptions: async (req, res) => {
     try {
       // Format sports options for frontend
-      const sportsOptions = VALID_SPORTS.map(sport => ({
+      const sportsOptions = VALID_SPORTS.map((sport) => ({
         name: sport,
-        roles: VALID_ROLES[sport]
+        roles: VALID_ROLES[sport],
       }));
-      
+
       res.json({ sports: sportsOptions });
     } catch (error) {
       console.error("Get sports options error:", error);
@@ -326,83 +345,89 @@ const authController = {
     }
   },
 
-// Initiate password reset
-forgotPassword: async (req, res) => {
-  try {
-    const { email } = req.body;
+  // Initiate password reset
+  forgotPassword: async (req, res) => {
+    try {
+      const { email } = req.body;
 
-    // Find user in MongoDB
-    const user = await User.findOne({ email });
-    if (!user) {
-      // For security reasons, don't reveal if user exists or not
-      return res.status(200).json({ 
-        message: "If your email is registered, you will receive a password reset link shortly" 
+      // Find user in MongoDB
+      const user = await User.findOne({ email });
+      if (!user) {
+        // For security reasons, don't reveal if user exists or not
+        return res.status(200).json({
+          message:
+            "If your email is registered, you will receive a password reset link shortly",
+        });
+      }
+
+      // Send password reset email using Firebase
+      await sendPasswordResetEmail(auth, email, {
+        url: `${process.env.FRONTEND_URL}/reset-password`, // URL to your reset password page
+        handleCodeInApp: true,
+      });
+
+      res.status(200).json({
+        message:
+          "If your email is registered, you will receive a password reset link shortly",
+      });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({
+        message: "Failed to process reset request",
+        error: error.message,
       });
     }
+  },
 
-    // Send password reset email using Firebase
-    await sendPasswordResetEmail(auth, email, {
-      url: `${process.env.FRONTEND_URL}/reset-password`, // URL to your reset password page
-      handleCodeInApp: true,
-    });
+  // Complete password reset with code (oobCode) from email
+  // Modify your resetPassword function
+  resetPassword: async (req, res) => {
+    try {
+      const { oobCode, newPassword } = req.body;
 
-    res.status(200).json({
-      message: "If your email is registered, you will receive a password reset link shortly"
-    });
-  } catch (error) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({
-      message: "Failed to process reset request",
-      error: error.message,
-    });
-  }
-},
+      if (!oobCode || !newPassword) {
+        return res
+          .status(400)
+          .json({ message: "Reset code and new password are required" });
+      }
 
-// Complete password reset with code (oobCode) from email
-// Modify your resetPassword function
-resetPassword: async (req, res) => {
-  try {
-    const { oobCode, newPassword } = req.body;
+      // Verify the oobCode with Firebase
+      const verificationResult = await admin
+        .auth()
+        .verifyPasswordResetCode(oobCode);
+      const email = verificationResult;
 
-    if (!oobCode || !newPassword) {
-      return res.status(400).json({ message: "Reset code and new password are required" });
+      // Find the user in MongoDB
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Confirm the password reset in Firebase
+      await admin.auth().confirmPasswordReset(oobCode, newPassword);
+
+      // Hash the new password for MongoDB
+      const hashedPassword = await hashPassword(newPassword);
+
+      // Update MongoDB password
+      user.password = hashedPassword;
+      await user.save();
+
+      res.status(200).json({ message: "Password reset successful" });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(400).json({
+        message: "Failed to reset password",
+        error: error.message,
+      });
     }
-
-    // Verify the oobCode with Firebase
-    const verificationResult = await admin.auth().verifyPasswordResetCode(oobCode);
-    const email = verificationResult;
-
-    // Find the user in MongoDB
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Confirm the password reset in Firebase
-    await admin.auth().confirmPasswordReset(oobCode, newPassword);
-
-    // Hash the new password for MongoDB
-    const hashedPassword = await hashPassword(newPassword);
-
-    // Update MongoDB password
-    user.password = hashedPassword;
-    await user.save();
-
-    res.status(200).json({ message: "Password reset successful" });
-  } catch (error) {
-    console.error("Reset password error:", error);
-    res.status(400).json({
-      message: "Failed to reset password",
-      error: error.message,
-    });
-  }
-},
+  },
   verifyEmail: async (req, res) => {
     try {
       const { token } = req.params;
 
       // Verify the token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = verifyToken(token);
       const user = await User.findById(decoded.userId);
 
       if (!user) {
@@ -427,7 +452,7 @@ resetPassword: async (req, res) => {
         message: "Email verified successfully",
         verified: true,
         onboardingRequired: user.isFirstLogin,
-        currentStep: user.onboardingStep
+        currentStep: user.onboardingStep,
       });
     } catch (error) {
       console.error("Email verification error:", error);
@@ -526,7 +551,8 @@ resetPassword: async (req, res) => {
 
       const assignedSports = sports.filter(
         (s) =>
-          validSports.includes(s.sport_name) && validRoles[s.sport_name].includes(s.role)
+          validSports.includes(s.sport_name) &&
+          validRoles[s.sport_name].includes(s.role)
       );
 
       if (assignedSports.length === 0) {
@@ -538,7 +564,7 @@ resetPassword: async (req, res) => {
       await User.findByIdAndUpdate(userId, {
         sports: assignedSports,
         isFirstLogin: false,
-        onboardingStep: 3 // Completed
+        onboardingStep: 3, // Completed
       });
 
       res.json({ message: "Onboarding completed successfully" });
@@ -553,7 +579,7 @@ resetPassword: async (req, res) => {
   logout: async (req, res) => {
     try {
       const { userId } = req.user; // From auth middleware
-      
+
       // Find user in MongoDB
       const user = await User.findById(userId);
       if (!user) {
@@ -562,7 +588,7 @@ resetPassword: async (req, res) => {
 
       // You may want to add any tokens to a blacklist in a production environment
       // This could be implemented with Redis or another fast storage solution
-      
+
       // Optionally update the last logout time
       user.lastLogout = new Date();
       await user.save();
@@ -575,7 +601,7 @@ resetPassword: async (req, res) => {
         error: error.message,
       });
     }
-  }
+  },
 };
 
 module.exports = authController;
