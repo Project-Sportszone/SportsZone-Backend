@@ -9,6 +9,9 @@ const app = express();
 const profileRoutes = require("./routes/profileRoutes/profileRoutes");
 const onboardingRoutes = require("./routes/authRoutes/onboardingRoutes");
 const cricketAPI = require("./routes/cricketRoute/index");
+const footballAPI = require("./routes/footballRoutes/index");
+const badmintonAPI = require("./routes/badmintonRoutes/index");
+const volleyballAPI = require("./routes/volleyballRoutes/index");
 // MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
@@ -22,5 +25,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/cricket", cricketAPI);
+app.use("/api/football", footballAPI);
+app.use("/api/badminton", badmintonAPI);
+app.use("/api/volleyball", volleyballAPI);
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
