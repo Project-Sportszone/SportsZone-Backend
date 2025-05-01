@@ -20,17 +20,17 @@ const teamController = {
       const { name, description, logo } = req.body;
 
       // NEW VALIDATION: Check if user is already part of another team
-      const isInOtherTeam = await Team.findOne({
-        "members.user": req.user.userId,
-      });
+      // const isInOtherTeam = await Team.findOne({
+      //   "members.user": req.user.userId,
+      // });
 
-      if (isInOtherTeam) {
-        return res.status(400).json({
-          error:
-            "You are already a member of another team and cannot create or join multiple teams",
-          teamName: isInOtherTeam.name,
-        });
-      }
+      // if (isInOtherTeam) {
+      //   return res.status(400).json({
+      //     error:
+      //       "You are already a member of another team and cannot create or join multiple teams",
+      //     teamName: isInOtherTeam.name,
+      //   });
+      // }
 
       const team = new Team({
         name,
