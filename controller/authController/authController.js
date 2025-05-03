@@ -116,7 +116,7 @@ const authController = {
       }
 
       // Generate Firebase token
-      const firebaseToken = await firebaseUser.getIdToken();
+      const firebaseToken = await firebaseUser.getIdToken(true);
 
       // Generate JWT token
       const token = generateToken({

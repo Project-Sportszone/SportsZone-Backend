@@ -58,6 +58,10 @@ const teamSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
+  },
+  activeSport:{
+    type:String,
+    default:"Cricket"
   }
 }, { timestamps: { createdAt: false, updatedAt: true } });
 

@@ -1,8 +1,5 @@
 const axios = require("axios");
-
-// This would typically use a database model
-// For this example, we'll use an in-memory array for matches
-let matches = [];
+const {Match} = require("../../models/cricketModel/match"); // Assuming you have a Match model
 
 const matchController = {
   // Get all teams - Now fetching from the API endpoint
@@ -27,41 +24,44 @@ const matchController = {
   },
 
   // Create a new match
-  createMatch: async (matchData) => {
-    // In a real app, this would save to a database
-    matches.push(matchData);
-    return matchData;
-  },
+  // createMatch: async (matchData) => {
+  //   try {
+  //     // Create a new match document in the database
+  //     const newMatch = new Match(matchData);
+  //     const savedMatch = await newMatch.save();
+  //     return savedMatch;
+  //   } catch (error) {
+  //     console.error("Error creating match:", error);
+  //     throw new Error("Failed to create match");
+  //   }
+  // },
 
   // Get all matches
   getAllMatches: async (req, res) => {
     try {
-      // Apply filters if provided
-      let filteredMatches = [...matches];
+      // Build the query based on filters
+      const query = {};
       
       if (req.query.team) {
         const teamId = req.query.team;
-        filteredMatches = filteredMatches.filter(
-          match => match.team1Id === teamId || match.team2Id === teamId
-        );
+        query.$or = [{ team1Id: teamId }, { team2Id: teamId }];
       }
       
       if (req.query.status) {
-        filteredMatches = filteredMatches.filter(
-          match => match.status === req.query.status
-        );
+        query.status = req.query.status;
       }
       
       if (req.query.format) {
-        filteredMatches = filteredMatches.filter(
-          match => match.format === req.query.format
-        );
+        query.format = req.query.format;
       }
+      
+      // Execute query on the database
+      const matches = await Match.find(query);
       
       res.status(200).json({
         success: true,
-        count: filteredMatches.length,
-        matches: filteredMatches
+        count: matches.length,
+        matches
       });
     } catch (error) {
       console.error("Error fetching matches:", error);
@@ -76,8 +76,7 @@ const matchController = {
   getMatchById: async (req, res) => {
     try {
       const matchId = req.params.id;
-      const match = matches.find(m => m.id === matchId);
-      
+      const match = await Match.findById(matchId)
       if (!match) {
         return res.status(404).json({
           success: false,
@@ -113,18 +112,16 @@ const matchController = {
       }
       
       // Find the match
-      const matchIndex = matches.findIndex(m => m.id === matchId);
-      if (matchIndex === -1) {
+      const match = await Match.findById(matchId);
+      if (!match) {
         return res.status(404).json({
           success: false,
           message: "Match not found"
         });
       }
       
-      const match = matches[matchIndex];
-      
       // Check if user has permission to update (match creator or team owner)
-      if (match.createdBy !== req.user.id) {
+      if (match.createdBy.toString() !== req.user.id) {
         return res.status(403).json({
           success: false,
           message: "Unauthorized to update this match score"
@@ -132,8 +129,8 @@ const matchController = {
       }
       
       // Check which team to update
-      const teamKey = match.team1Id === teamId ? "team1" : 
-                     match.team2Id === teamId ? "team2" : null;
+      const teamKey = match.team1Id.toString() === teamId ? "team1" : 
+                     match.team2Id.toString() === teamId ? "team2" : null;
       
       if (!teamKey) {
         return res.status(400).json({
@@ -142,18 +139,24 @@ const matchController = {
         });
       }
       
-      // Update score
-      if (runs !== undefined) match.scores[teamKey].runs = runs;
-      if (wickets !== undefined) match.scores[teamKey].wickets = wickets;
-      if (overs !== undefined) match.scores[teamKey].overs = overs;
+      // Create update object
+      const updateData = {};
       
-      // Save updated match
-      matches[matchIndex] = match;
+      if (runs !== undefined) updateData[`scores.${teamKey}.runs`] = runs;
+      if (wickets !== undefined) updateData[`scores.${teamKey}.wickets`] = wickets;
+      if (overs !== undefined) updateData[`scores.${teamKey}.overs`] = overs;
+      
+      // Update match in database
+      const updatedMatch = await Match.findByIdAndUpdate(
+        matchId,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
       
       res.status(200).json({
         success: true,
         message: "Match score updated successfully",
-        match
+        match: updatedMatch
       });
     } catch (error) {
       console.error("Error updating match score:", error);
@@ -171,43 +174,40 @@ const matchController = {
       const { status } = req.body;
       
       // Validate status
-      const validStatuses = ["scheduled", "in-progress", "completed", "abandoned"];
+      const validStatuses = ["upcoming","toss","innings_break","delayed","rain_interrupted","completed", "abandoned","live",];
       if (!status || !validStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
           message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`
         });
       }
-      
       // Find the match
-      const matchIndex = matches.findIndex(m => m.id === matchId);
-      if (matchIndex === -1) {
+      const match = await Match.findById(matchId);;
+      if (!match) {
         return res.status(404).json({
           success: false,
           message: "Match not found"
         });
       }
-      
-      const match = matches[matchIndex];
-      
       // Check if user has permission (match creator)
-      if (match.createdBy !== req.user.id) {
+      if (match.createdBy.toString() !== req.user.userId) {
         return res.status(403).json({
           success: false,
           message: "Unauthorized to update this match status"
         });
       }
       
-      // Update status
-      match.status = status;
-      
-      // Save updated match
-      matches[matchIndex] = match;
+      // Update status in database
+      const updatedMatch = await Match.findByIdAndUpdate(
+        matchId,
+        { status },
+        { new: true, runValidators: true }
+      );
       
       res.status(200).json({
         success: true,
         message: "Match status updated successfully",
-        match
+        match: updatedMatch
       });
     } catch (error) {
       console.error("Error updating match status:", error);
@@ -224,26 +224,24 @@ const matchController = {
       const matchId = req.params.id;
       
       // Find the match
-      const matchIndex = matches.findIndex(m => m.id === matchId);
-      if (matchIndex === -1) {
+      const match = await Match.findById(matchId);
+      if (!match) {
         return res.status(404).json({
           success: false,
           message: "Match not found"
         });
       }
       
-      const match = matches[matchIndex];
-      
       // Check if user has permission (match creator)
-      if (match.createdBy !== req.user.id) {
+      if (match.createdBy.toString() !== req.user.id) {
         return res.status(403).json({
           success: false,
           message: "Unauthorized to delete this match"
         });
       }
       
-      // Delete match
-      matches.splice(matchIndex, 1);
+      // Delete match from database
+      await Match.findByIdAndDelete(matchId);
       
       res.status(200).json({
         success: true,

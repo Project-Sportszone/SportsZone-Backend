@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const matchScoringController = require('../controllers/matchScoringController');
-const { authMiddleware } = require('../middleware/authMiddleware');
+const matchScoringController = require('../../controller/cricketAPIController/cricmatch');
+const  authMiddleware  = require('../../middleware/auth_middleware');
+
 
 // Match creation and basic operations
 router.post('/matches', authMiddleware, matchScoringController.createMatch);
-router.get('/matches', matchScoringController.getAllMatches);
-router.get('/matches/:id', matchScoringController.getMatchById);
+router.get('/matches', authMiddleware,matchScoringController.getAllMatches);
+router.get('/matches/:id',authMiddleware, matchScoringController.getMatchById);
 
 // Match progression routes
 router.put('/matches/:id/toss', authMiddleware, matchScoringController.updateToss);

@@ -1,8 +1,8 @@
 const User = require("../../models/userModel/userModel");
-const Team = require("../../models/cricketModel/teams");
+const Team = require("../../models/footballModel/teams");
 
 // Maximum number of team members allowed
-const MAX_TEAM_MEMBERS = 11;
+const MAX_TEAM_MEMBERS = 15;
 
 // Team creation steps
 const TEAM_CREATION_STEPS = {
@@ -21,13 +21,14 @@ const teamController = {
 
       // NEW VALIDATION: Check if user is already part of another team
       // const isInOtherTeam = await Team.findOne({
-      //   "members.user": req.user.userId
+      //   "members.user": req.user.userId,
       // });
 
       // if (isInOtherTeam) {
       //   return res.status(400).json({
-      //     error: "You are already a member of another team and cannot create or join multiple teams",
-      //     teamName: isInOtherTeam.name
+      //     error:
+      //       "You are already a member of another team and cannot create or join multiple teams",
+      //     teamName: isInOtherTeam.name,
       //   });
       // }
 
@@ -72,11 +73,9 @@ const teamController = {
 
       // Check if team has at least one member (plus the owner/admin)
       if (team.members.length < 2) {
-        return res
-          .status(400)
-          .json({
-            error: "Team must have at least one member besides the owner",
-          });
+        return res.status(400).json({
+          error: "Team must have at least one member besides the owner",
+        });
       }
 
       // Update team creation step
@@ -140,11 +139,9 @@ const teamController = {
 
       // Captain and vice-captain cannot be the same person
       if (captainId === viceCaptainId) {
-        return res
-          .status(400)
-          .json({
-            error: "Captain and vice-captain cannot be the same person",
-          });
+        return res.status(400).json({
+          error: "Captain and vice-captain cannot be the same person",
+        });
       }
 
       // Assign captain and vice-captain
@@ -252,7 +249,6 @@ const teamController = {
   },
 
   // Get the teams
-
   getAvailaibleTeams: async (req, res) => {
     try {
       if (!req.user || !req.user.userId) {
@@ -290,7 +286,6 @@ const teamController = {
   },
 
   // Add a user directly to team by email (modified to work with step system)
-  // Add a user directly to team by email (modified to work with step system)
   addTeamMember: async (req, res) => {
     try {
       const { email, role = "member" } = req.body;
@@ -323,11 +318,9 @@ const teamController = {
 
       // Check if team has reached maximum members limit
       if (team.members.length >= MAX_TEAM_MEMBERS) {
-        return res
-          .status(400)
-          .json({
-            error: `Team cannot have more than ${MAX_TEAM_MEMBERS} members`,
-          });
+        return res.status(400).json({
+          error: `Team cannot have more than ${MAX_TEAM_MEMBERS} members`,
+        });
       }
 
       // Verify the user to be added exists by email
@@ -350,13 +343,14 @@ const teamController = {
       // NEW VALIDATION: Check if user is a member of any other team
       // const isInOtherTeam = await Team.findOne({
       //   _id: { $ne: team._id }, // Exclude current team
-      //   "members.user": userToAdd._id
+      //   "members.user": userToAdd._id,
       // });
 
       // if (isInOtherTeam) {
       //   return res.status(400).json({
-      //     error: "User is already a member of another team and cannot join multiple teams",
-      //     teamName: isInOtherTeam.name // Optional: Provide the name of the other team
+      //     error:
+      //       "User is already a member of another team and cannot join multiple teams",
+      //     teamName: isInOtherTeam.name, // Optional: Provide the name of the other team
       //   });
       // }
 
@@ -379,6 +373,7 @@ const teamController = {
       res.status(500).json({ error: error.message });
     }
   },
+
   // Remove a team member
   removeTeamMember: async (req, res) => {
     try {
@@ -575,6 +570,35 @@ const teamController = {
       res.json(updatedTeam);
     } catch (error) {
       res.status(500).json({ error: error.message });
+    }
+  },
+
+  removeTeam: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId; // Assuming authentication middleware sets req.user
+
+      // Find the team by ID
+      const team = await Team.findById(id);
+
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      // Check if the requesting user is the owner
+      if (team.owner.toString() !== userId) {
+        return res
+          .status(403)
+          .json({ error: "Only the team owner can delete this team" });
+      }
+
+      // Delete the team
+      await Team.findByIdAndDelete(id);
+
+      res.status(200).json({ message: "Team deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   },
 };
