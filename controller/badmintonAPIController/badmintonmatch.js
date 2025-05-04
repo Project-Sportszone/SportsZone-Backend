@@ -202,20 +202,16 @@ const badmintonMatchController = {
     }
   },
 
-  // Update match game scores
-  updateGameScore: async (req, res) => {
+  // Update game scores point-by-point with dynamic playerScoredId
+  updatePointScore: async (req, res) => {
     try {
       const matchId = req.params.id;
-      const { gameNumber, player1Score, player2Score } = req.body;
+      const { playerScoredId } = req.body; // expects player ID string
 
-      if (
-        typeof gameNumber !== "number" ||
-        typeof player1Score !== "number" ||
-        typeof player2Score !== "number"
-      ) {
+      if (!playerScoredId) {
         return res.status(400).json({
           success: false,
-          message: "Game number and scores must be numbers",
+          message: "playerScoredId is required",
         });
       }
 
@@ -234,52 +230,118 @@ const badmintonMatchController = {
       if (!isScorer) {
         return res.status(403).json({
           success: false,
-          message: "Only designated scorers can update game scores",
+          message: "Only designated scorers can update the score",
         });
       }
 
-      // Find the game or create if not exists
-      let game = match.games.find((g) => g.gameNumber === gameNumber);
-      if (!game) {
-        game = {
-          gameNumber,
-          player1Score,
-          player2Score,
+      // Initialize current game if none
+      if (!match.currentGame) {
+        match.currentGame = {
+          gameNumber: 1,
+          player1Score: 0,
+          player2Score: 0,
           winner: null,
         };
-        match.games.push(game);
-      } else {
-        game.player1Score = player1Score;
-        game.player2Score = player2Score;
       }
 
-      // Determine winner if any
-      if (player1Score > player2Score) {
-        game.winner = match.player1.id;
-      } else if (player2Score > player1Score) {
-        game.winner = match.player2.id;
+      // Determine which player scored and their team
+      let playerScoredKey = null;
+      let teamScoredKey = null;
+      if (match.player1.id.toString() === playerScoredId.toString()) {
+        playerScoredKey = "player1";
+        teamScoredKey = "team1";
+      } else if (match.player2.id.toString() === playerScoredId.toString()) {
+        playerScoredKey = "player2";
+        teamScoredKey = "team2";
       } else {
-        game.winner = null;
+        return res.status(400).json({
+          success: false,
+          message: "playerScoredId does not belong to any player in the match",
+        });
+      }
+
+      // Update score for the player who scored
+      if (playerScoredKey === "player1") {
+        match.currentGame.player1Score += 1;
+      } else {
+        match.currentGame.player2Score += 1;
+      }
+
+      // Add commentary for the point scored
+      const scoringTeamName =
+        teamScoredKey === "team1" ? match.team1.name : match.team2.name;
+      match.commentary.push({
+        time: new Date(),
+        text: `Point scored by player ${playerScoredId} for team ${scoringTeamName}`,
+        type: "point",
+      });
+
+      // Check if game is won
+      const p1 = match.currentGame.player1Score;
+      const p2 = match.currentGame.player2Score;
+      const maxScore = 30;
+      let gameWinner = null;
+
+      if ((p1 >= 21 || p2 >= 21) && Math.abs(p1 - p2) >= 2) {
+        gameWinner = p1 > p2 ? match.player1.id : match.player2.id;
+      }
+
+      if (gameWinner) {
+        match.currentGame.winner = gameWinner;
+        // Push current game to games array
+        match.games.push(match.currentGame);
+
+        // Reset current game for next game if match not ended
+        match.currentGame = {
+          gameNumber: match.games.length + 1,
+          player1Score: 0,
+          player2Score: 0,
+          winner: null,
+        };
+
+        // Check if match is won (best of 3)
+        const player1GamesWon = match.games.filter(
+          (g) => g.winner && g.winner.toString() === match.player1.id.toString()
+        ).length;
+        const player2GamesWon = match.games.filter(
+          (g) => g.winner && g.winner.toString() === match.player2.id.toString()
+        ).length;
+
+        const gamesNeededToWin = 2; // best of 3
+
+        if (
+          player1GamesWon === gamesNeededToWin ||
+          player2GamesWon === gamesNeededToWin
+        ) {
+          match.status = MatchConstants.MATCH_STATUS.COMPLETED;
+          match.result = {
+            winner:
+              player1GamesWon === gamesNeededToWin
+                ? match.player1.id
+                : match.player2.id,
+            playerOfMatch: null,
+          };
+        }
       }
 
       match.lastScorerAction = {
         user: req.user.userId,
         time: new Date(),
-        action: `Updated score for game ${gameNumber}`,
+        action: `Updated point score for player ${playerScoredKey} in team ${teamScoredKey}`,
       };
 
       await match.save();
 
       res.status(200).json({
         success: true,
-        message: "Game score updated successfully",
+        message: "Point score updated successfully",
         match,
       });
     } catch (error) {
-      console.error("Error updating game score:", error);
+      console.error("Error updating point score:", error);
       res.status(500).json({
         success: false,
-        message: "Failed to update game score",
+        message: "Failed to update point score",
         error: error.message,
       });
     }

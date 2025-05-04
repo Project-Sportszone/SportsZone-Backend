@@ -10,7 +10,6 @@ const footballMatchController = {
       const matchId = req.params.id;
       const { status } = req.body;
 
-      // Validate status
       if (!Object.values(MatchConstants.MATCH_STATUS).includes(status)) {
         return res.status(400).json({
           success: false,
@@ -18,7 +17,6 @@ const footballMatchController = {
         });
       }
 
-      // Get the match
       const match = await Match.findById(matchId);
       if (!match) {
         return res.status(404).json({
@@ -27,7 +25,6 @@ const footballMatchController = {
         });
       }
 
-      // Check if user is a scorer for this match
       const isScorer = match.scorers.some(
         (scorer) => scorer.user.toString() === req.user.userId.toString()
       );
@@ -39,10 +36,8 @@ const footballMatchController = {
         });
       }
 
-      // Update match status
       match.status = status;
 
-      // Add commentary based on status
       let commentaryText = "";
       switch (status) {
         case MatchConstants.MATCH_STATUS.FIRST_HALF:
@@ -80,7 +75,6 @@ const footballMatchController = {
         time: new Date(),
       });
 
-      // Update last scorer action
       match.lastScorerAction = {
         user: req.user.userId,
         time: new Date(),
@@ -297,6 +291,22 @@ const footballMatchController = {
             isPenalty: eventData.isPenalty || false,
             assistedBy: eventData.assistedBy || null,
           });
+
+          // Dynamically update score for the team
+          if (!match.score) {
+            match.score = {
+              team1: 0,
+              team2: 0,
+            };
+          }
+
+          if (eventData.team.toString() === match.player1.id.toString()) {
+            match.score.team1 += 1;
+          } else if (
+            eventData.team.toString() === match.player2.id.toString()
+          ) {
+            match.score.team2 += 1;
+          }
 
           commentaryText = `Goal scored by ${
             eventData.playerName || "Unknown"

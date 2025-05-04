@@ -202,20 +202,16 @@ const volleyballMatchController = {
     }
   },
 
-  // Update set scores
-  updateSetScore: async (req, res) => {
+  // Update set scores point-by-point with playerScoredId only
+  updatePointScore: async (req, res) => {
     try {
       const matchId = req.params.id;
-      const { setNumber, team1Score, team2Score } = req.body;
+      const { playerScoredId } = req.body; // expects player ID string
 
-      if (
-        typeof setNumber !== "number" ||
-        typeof team1Score !== "number" ||
-        typeof team2Score !== "number"
-      ) {
+      if (!playerScoredId) {
         return res.status(400).json({
           success: false,
-          message: "Set number and scores must be numbers",
+          message: "playerScoredId is required",
         });
       }
 
@@ -234,52 +230,123 @@ const volleyballMatchController = {
       if (!isScorer) {
         return res.status(403).json({
           success: false,
-          message: "Only designated scorers can update set scores",
+          message: "Only designated scorers can update the score",
         });
       }
 
-      // Find the set or create if not exists
-      let set = match.sets.find((s) => s.setNumber === setNumber);
-      if (!set) {
-        set = {
-          setNumber,
-          team1Score,
-          team2Score,
+      // Initialize current set if none
+      if (!match.currentSet) {
+        match.currentSet = {
+          setNumber: 1,
+          team1Score: 0,
+          team2Score: 0,
           winner: null,
         };
-        match.sets.push(set);
-      } else {
-        set.team1Score = team1Score;
-        set.team2Score = team2Score;
       }
 
-      // Determine winner if any
-      if (team1Score > team2Score) {
-        set.winner = match.team1.id;
-      } else if (team2Score > team1Score) {
-        set.winner = match.team2.id;
+      // Determine which team the player belongs to
+      let teamScoredKey = null;
+      if (
+        match.team1.players.some(
+          (player) => player.toString() === playerScoredId.toString()
+        )
+      ) {
+        teamScoredKey = "team1";
+      } else if (
+        match.team2.players.some(
+          (player) => player.toString() === playerScoredId.toString()
+        )
+      ) {
+        teamScoredKey = "team2";
       } else {
-        set.winner = null;
+        return res.status(400).json({
+          success: false,
+          message: "playerScoredId does not belong to any team in the match",
+        });
+      }
+
+      // Update score for the team who scored
+      if (teamScoredKey === "team1") {
+        match.currentSet.team1Score += 1;
+      } else {
+        match.currentSet.team2Score += 1;
+      }
+
+      // Add commentary for the point scored
+      const scoringTeamName =
+        teamScoredKey === "team1" ? match.team1.name : match.team2.name;
+      match.commentary.push({
+        time: new Date(),
+        text: `Point scored by player ${playerScoredId} for team ${scoringTeamName}`,
+        type: "point",
+      });
+
+      // Check if set is won
+      const t1 = match.currentSet.team1Score;
+      const t2 = match.currentSet.team2Score;
+      const maxScore = 25;
+      let setWinner = null;
+
+      if ((t1 >= maxScore || t2 >= maxScore) && Math.abs(t1 - t2) >= 2) {
+        setWinner = t1 > t2 ? match.team1.id : match.team2.id;
+      }
+
+      if (setWinner) {
+        match.currentSet.winner = setWinner;
+        // Push current set to sets array
+        match.sets.push(match.currentSet);
+
+        // Reset current set for next set if match not ended
+        match.currentSet = {
+          setNumber: match.sets.length + 1,
+          team1Score: 0,
+          team2Score: 0,
+          winner: null,
+        };
+
+        // Check if match is won (best of 5)
+        const team1SetsWon = match.sets.filter(
+          (s) => s.winner && s.winner.toString() === match.team1.id.toString()
+        ).length;
+        const team2SetsWon = match.sets.filter(
+          (s) => s.winner && s.winner.toString() === match.team2.id.toString()
+        ).length;
+
+        const setsNeededToWin = 3; // best of 5
+
+        if (
+          team1SetsWon === setsNeededToWin ||
+          team2SetsWon === setsNeededToWin
+        ) {
+          match.status = MatchConstants.MATCH_STATUS.COMPLETED;
+          match.result = {
+            winner:
+              team1SetsWon === setsNeededToWin
+                ? match.team1.id
+                : match.team2.id,
+            playerOfMatch: null,
+          };
+        }
       }
 
       match.lastScorerAction = {
         user: req.user.userId,
         time: new Date(),
-        action: `Updated score for set ${setNumber}`,
+        action: `Updated point score for player ${playerScoredId} in team ${teamScoredKey}`,
       };
 
       await match.save();
 
       res.status(200).json({
         success: true,
-        message: "Set score updated successfully",
+        message: "Point score updated successfully",
         match,
       });
     } catch (error) {
-      console.error("Error updating set score:", error);
+      console.error("Error updating point score:", error);
       res.status(500).json({
         success: false,
-        message: "Failed to update set score",
+        message: "Failed to update point score",
         error: error.message,
       });
     }
