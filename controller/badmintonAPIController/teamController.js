@@ -286,34 +286,114 @@ const teamController = {
   },
 
   // Add a user directly to team by email (modified to work with step system)
+  // addTeamMember: async (req, res) => {
+  //   try {
+  //     const { email, role = "member" } = req.body;
+  //     // Verify the team exists
+  //     const team = await Team.findById(req.params.id);
+  //     if (!team) {
+  //       return res.status(404).json({ error: "Team not found" });
+  //     }
+
+  //     // Check if user has permission to add members (must be a member with admin role or owner)
+  //     const isOwner = team.owner.toString() === req.user.userId.toString();
+  //     const isAdmin = team.members.some(
+  //       (member) =>
+  //         member.user.toString() === req.user.userId.toString() &&
+  //         member.role === "admin"
+  //     );
+
+  //     if (!isOwner && !isAdmin) {
+  //       return res
+  //         .status(403)
+  //         .json({ error: "No permission to add team members" });
+  //     }
+
+  //     // Check if team is in the right step to add members
+  //     if (team.creationStep > TEAM_CREATION_STEPS.MEMBERS_ADDED) {
+  //       return res
+  //         .status(400)
+  //         .json({ error: "Cannot add members after captain assignment" });
+  //     }
+
+  //     // Check if team has reached maximum members limit
+  //     if (team.members.length >= MAX_TEAM_MEMBERS) {
+  //       return res.status(400).json({
+  //         error: `Team cannot have more than ${MAX_TEAM_MEMBERS} members`,
+  //       });
+  //     }
+
+  //     // Verify the user to be added exists by email
+  //     const userToAdd = await User.findOne({ email });
+  //     if (!userToAdd) {
+  //       return res
+  //         .status(404)
+  //         .json({ error: "User not found with the provided email" });
+  //     }
+
+  //     // Check if user is already a member of this team
+  //     const isMember = team.members.some(
+  //       (member) => member.user.toString() === userToAdd._id.toString()
+  //     );
+
+  //     if (isMember) {
+  //       return res.status(400).json({ error: "User is already a team member" });
+  //     }
+
+  //     // NEW VALIDATION: Check if user is a member of any other team
+  //     // const isInOtherTeam = await Team.findOne({
+  //     //   _id: { $ne: team._id }, // Exclude current team
+  //     //   "members.user": userToAdd._id,
+  //     // });
+
+  //     // if (isInOtherTeam) {
+  //     //   return res.status(400).json({
+  //     //     error:
+  //     //       "User is already a member of another team and cannot join multiple teams",
+  //     //     teamName: isInOtherTeam.name, // Optional: Provide the name of the other team
+  //     //   });
+  //     // }
+
+  //     // Add the user directly to the team
+  //     team.members.push({
+  //       user: userToAdd._id,
+  //       role: role, // Can be "admin" or "member"
+  //       joinedAt: new Date(),
+  //     });
+
+  //     await team.save();
+
+  //     // Return updated team with populated user data
+  //     const updatedTeam = await Team.findById(req.params.id)
+  //       .populate("owner", "name email")
+  //       .populate("members.user", "name email");
+
+  //     res.json(updatedTeam);
+  //   } catch (error) {
+  //     res.status(500).json({ error: error.message });
+  //   }
+  // },
   addTeamMember: async (req, res) => {
     try {
       const { email, role = "member" } = req.body;
+
       // Verify the team exists
       const team = await Team.findById(req.params.id);
       if (!team) {
         return res.status(404).json({ error: "Team not found" });
       }
 
-      // Check if user has permission to add members (must be a member with admin role or owner)
-      const isOwner = team.owner.toString() === req.user.userId.toString();
+      // Check if the requester has permission to add members (must be admin)
       const isAdmin = team.members.some(
         (member) =>
           member.user.toString() === req.user.userId.toString() &&
           member.role === "admin"
       );
 
-      if (!isOwner && !isAdmin) {
+      if (!isAdmin) {
         return res
           .status(403)
-          .json({ error: "No permission to add team members" });
-      }
-
-      // Check if team is in the right step to add members
-      if (team.creationStep > TEAM_CREATION_STEPS.MEMBERS_ADDED) {
-        return res
-          .status(400)
-          .json({ error: "Cannot add members after captain assignment" });
+          .json({ error: "Only admins can add team members" });
       }
 
       // Check if team has reached maximum members limit
@@ -340,24 +420,10 @@ const teamController = {
         return res.status(400).json({ error: "User is already a team member" });
       }
 
-      // NEW VALIDATION: Check if user is a member of any other team
-      // const isInOtherTeam = await Team.findOne({
-      //   _id: { $ne: team._id }, // Exclude current team
-      //   "members.user": userToAdd._id,
-      // });
-
-      // if (isInOtherTeam) {
-      //   return res.status(400).json({
-      //     error:
-      //       "User is already a member of another team and cannot join multiple teams",
-      //     teamName: isInOtherTeam.name, // Optional: Provide the name of the other team
-      //   });
-      // }
-
-      // Add the user directly to the team
+      // Add the user to the team
       team.members.push({
         user: userToAdd._id,
-        role: role, // Can be "admin" or "member"
+        role: role, // Default role is "member"
         joinedAt: new Date(),
       });
 
@@ -381,48 +447,51 @@ const teamController = {
         return res.status(404).json({ error: "Team not found" });
       }
 
-      // Check if user has permission (must be admin, owner or removing self)
-      const isOwner = team.owner.toString() === req.user.userId.toString();
+      // Check if the requester has permission (must be admin)
       const isAdmin = team.members.some(
         (member) =>
           member.user.toString() === req.user.userId.toString() &&
           member.role === "admin"
       );
-      const isSelf = req.params.userId === req.user.userId.toString();
 
-      if (!isOwner && !isAdmin && !isSelf) {
+      if (!isAdmin) {
         return res
           .status(403)
-          .json({ error: "No permission to remove team members" });
+          .json({ error: "Only admins can remove team members" });
       }
 
       // Cannot remove the owner
-      if (team.owner.toString() === req.params.userId && !isSelf) {
-        return res.status(400).json({ error: "Cannot remove team owner" });
+      if (team.owner.toString() === req.params.userId) {
+        return res.status(400).json({ error: "Cannot remove the team owner" });
       }
 
-      // Check if team is in the right step to remove members
-      if (team.creationStep > TEAM_CREATION_STEPS.MEMBERS_ADDED) {
-        // Check if attempting to remove captain or vice-captain
-        if (
-          (team.captain && team.captain.toString() === req.params.userId) ||
-          (team.viceCaptain &&
-            team.viceCaptain.toString() === req.params.userId)
-        ) {
-          return res.status(400).json({
-            error:
-              "Cannot remove captain or vice-captain after they have been assigned",
-          });
-        }
-      }
+      // Check if the user being removed is the captain or vice-captain
+      const isCaptain = team.captain?.toString() === req.params.userId;
+      const isViceCaptain = team.viceCaptain?.toString() === req.params.userId;
 
       // Remove the user
       team.members = team.members.filter(
         (member) => member.user.toString() !== req.params.userId
       );
 
+      // Reassign roles if necessary
+      if (isCaptain) {
+        team.captain = null;
+      }
+      if (isViceCaptain) {
+        team.viceCaptain = null;
+      }
+
       await team.save();
-      res.json(team);
+
+      // Return updated team with populated data
+      const updatedTeam = await Team.findById(req.params.id)
+        .populate("owner", "name email")
+        .populate("members.user", "name email")
+        .populate("captain", "name email")
+        .populate("viceCaptain", "name email");
+
+      res.json(updatedTeam);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -523,18 +592,17 @@ const teamController = {
         return res.status(404).json({ error: "Team not found" });
       }
 
-      // Check if the requester has permission (must be owner or admin)
-      const isOwner = team.owner.toString() === req.user.userId.toString();
+      // Check if the requester has permission (must be admin)
       const isAdmin = team.members.some(
         (member) =>
           member.user.toString() === req.user.userId.toString() &&
           member.role === "admin"
       );
 
-      if (!isOwner && !isAdmin) {
+      if (!isAdmin) {
         return res
           .status(403)
-          .json({ error: "No permission to update member roles" });
+          .json({ error: "Only admins can update member roles" });
       }
 
       // Cannot demote the owner from admin role

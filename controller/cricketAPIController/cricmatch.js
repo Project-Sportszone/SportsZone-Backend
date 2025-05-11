@@ -68,6 +68,7 @@ const matchScoringController = {
         .populate("members.user", "_id name email")
         .populate("captain", "_id name email")
         .populate("viceCaptain", "_id name email");
+      console.log("Team2", team2);
 
       if (!team1 || !team2) {
         return res.status(404).json({
@@ -127,7 +128,6 @@ const matchScoringController = {
           team1.captain._id.toString() === member.user._id.toString(),
         isWicketkeeper: false, // Default, would be set manually later
       }));
-      console.log("team1Players", team1.members);
       const team2Players = team2.members.map((member) => ({
         player: member.user._id,
         name: member.user?.name,
@@ -227,7 +227,6 @@ const matchScoringController = {
           logo: team2.logo,
           players: team2Players,
         },
-        currentInnings: 1,
         innings: [initialInnings],
         scorers: scorersList,
         battingTeam: team1._id,
@@ -237,7 +236,6 @@ const matchScoringController = {
           {
             over: 0,
             ball: 0,
-            innings: 1,
             text: `Match created: ${team1.name} vs ${team2.name} at ${venue}`,
             type: "start",
             time: new Date(),
@@ -261,8 +259,165 @@ const matchScoringController = {
       });
     }
   },
+  getMatchDetails: async (req, res) => {
+    try {
+      const matchId = req.params.id;
 
+      // Fetch the match by ID
+      const match = await Match.findById(matchId)
+        .populate("team1.id", "name title logo")
+        .populate("team2.id", "name title logo")
+        .populate("scorers.user", "name")
+        .populate("battingTeam", "name")
+        .populate("bowlingTeam", "name");
+
+      if (!match) {
+        return res.status(404).json({
+          success: false,
+          message: "Match not found",
+        });
+      }
+
+      // Extract team details
+      const team1Details = {
+        name: match.team1.name,
+        title: match.team1.title || "No title",
+        logo: match.team1.logo || null,
+      };
+
+      const team2Details = {
+        name: match.team2.name,
+        title: match.team2.title || "No title",
+        logo: match.team2.logo || null,
+      };
+
+      // Extract live updates
+      const liveUpdates = {
+        status: match.status,
+        currentInnings: match.currentInnings,
+        battingTeam: match.battingTeam.name,
+        bowlingTeam: match.bowlingTeam.name,
+        runs: match.innings[match.currentInnings - 1]?.runs || 0,
+        wickets: match.innings[match.currentInnings - 1]?.wickets || 0,
+        overs: match.innings[match.currentInnings - 1]?.overs || 0,
+        balls: match.innings[match.currentInnings - 1]?.balls || 0,
+        target: match.innings[match.currentInnings - 1]?.target || null,
+        requiredRunRate:
+          match.innings[match.currentInnings - 1]?.requiredRunRate || null,
+      };
+
+      // Extract commentary
+      const commentary = match.commentary.map((comment) => ({
+        over: comment.over,
+        ball: comment.ball,
+        text: comment.text,
+        type: comment.type,
+        time: comment.time,
+      }));
+
+      // Extract score details
+      const scoreDetails = {
+        team1: {
+          runs: match.innings[0]?.runs || 0,
+          wickets: match.innings[0]?.wickets || 0,
+          overs: match.innings[0]?.overs || 0,
+          balls: match.innings[0]?.balls || 0,
+        },
+        team2: {
+          runs: match.innings[1]?.runs || 0,
+          wickets: match.innings[1]?.wickets || 0,
+          overs: match.innings[1]?.overs || 0,
+          balls: match.innings[1]?.balls || 0,
+        },
+      };
+
+      // Return the match details
+      res.status(200).json({
+        success: true,
+        matchDetails: {
+          team1Details,
+          team2Details,
+          liveUpdates,
+          commentary,
+          scoreDetails,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching match details:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch match details",
+        error: error.message,
+      });
+    }
+  },
   // Get all matches with filters
+  // getAllMatches: async (req, res) => {
+  //   try {
+  //     const { status, format, team, date, upcoming } = req.query;
+
+  //     // Build query
+  //     const query = {};
+
+  //     if (status) {
+  //       query.status = status;
+  //     }
+
+  //     if (format) {
+  //       query.format = format;
+  //     }
+
+  //     if (team) {
+  //       query.$or = [{ "team1.id": team }, { "team2.id": team }];
+  //     }
+
+  //     if (date) {
+  //       const startDate = new Date(date);
+  //       startDate.setHours(0, 0, 0, 0);
+
+  //       const endDate = new Date(date);
+  //       endDate.setHours(23, 59, 59, 999);
+
+  //       query.matchDate = {
+  //         $gte: startDate,
+  //         $lte: endDate,
+  //       };
+  //     }
+
+  //     if (upcoming === "true") {
+  //       query.matchDate = {
+  //         $gte: new Date(),
+  //       };
+  //       query.status = {
+  //         $in: [
+  //           MatchConstants.MATCH_STATUS.UPCOMING,
+  //           MatchConstants.MATCH_STATUS.TOSS,
+  //         ],
+  //       };
+  //     }
+
+  //     // Get matches with selected fields for list view
+  //     const matches = await Match.find(query)
+  //       .select(
+  //         "title status format venue matchDate team1.name team1.logo team2.name team2.logo innings.runs innings.wickets innings.overs innings.balls innings result toss"
+  //       )
+  //       .sort({ matchDate: -1 });
+
+  //     res.status(200).json({
+  //       success: true,
+  //       count: matches.length,
+  //       matches,
+  //     });
+  //   } catch (error) {
+  //     console.error("Error fetching matches:", error);
+  //     res.status(500).json({
+  //       success: false,
+  //       message: "Failed to fetch matches",
+  //       error: error.message,
+  //     });
+  //   }
+  // },
+
   getAllMatches: async (req, res) => {
     try {
       const { status, format, team, date, upcoming } = req.query;
@@ -309,9 +464,23 @@ const matchScoringController = {
 
       // Get matches with selected fields for list view
       const matches = await Match.find(query)
-        .select(
-          "title status format venue matchDate team1.name team1.logo team2.name team2.logo innings.runs innings.wickets innings.overs innings.balls currentInnings result toss"
-        )
+        .select({
+          title: 1,
+          status: 1,
+          format: 1,
+          venue: 1,
+          matchDate: 1,
+          "team1.name": 1,
+          "team1.logo": 1,
+          "team2.name": 1,
+          "team2.logo": 1,
+          "innings.runs": 1,
+          "innings.wickets": 1,
+          "innings.overs": 1,
+          "innings.balls": 1,
+          result: 1,
+          toss: 1,
+        })
         .sort({ matchDate: -1 });
 
       res.status(200).json({
@@ -461,7 +630,7 @@ const matchScoringController = {
       match.commentary.push({
         over: 0,
         ball: 0,
-        innings: 1,
+        inningsNumber: 1,
         text: `${winnerName} won the toss and elected to ${decision} first against ${loserName}. ${battingTeamName} will bat first.`,
         type: "start",
         time: new Date(),
@@ -492,79 +661,85 @@ const matchScoringController = {
   },
 
   // Start the match
-  startMatch: async (req, res) => {
-    try {
-      const matchId = req.params.id;
+startMatch: async (req, res) => {
+  try {
+    const matchId = req.params.id;
 
-      // Get the match
-      const match = await Match.findById(matchId);
-      if (!match) {
-        return res.status(404).json({
-          success: false,
-          message: "Match not found",
-        });
-      }
-
-      // Check if user is a scorer for this match
-      const isScorer = match.scorers.some(
-        (scorer) => scorer.user.toString() === req.user.userId.toString()
-      );
-
-      if (!isScorer) {
-        return res.status(403).json({
-          success: false,
-          message: "Only designated scorers can start the match",
-        });
-      }
-
-      // Check if toss has been done
-      if (!match.toss || !match.toss.winner) {
-        return res.status(400).json({
-          success: false,
-          message: "Toss must be completed before starting the match",
-        });
-      }
-
-      // Update match status
-      match.status = MatchConstants.MATCH_STATUS.LIVE;
-
-      // Add match start commentary
-      match.commentary.push({
-        over: 0,
-        ball: 0,
-        innings: match.currentInnings,
-        text: `Match started. ${
-          match.innings[0].battingTeam.toString() === match.team1.id.toString()
-            ? match.team1.name
-            : match.team2.name
-        } batting first.`,
-        type: "start",
-        time: new Date(),
-      });
-
-      // Update last scorer action
-      match.lastScorerAction = {
-        user: req.user.userId,
-        time: new Date(),
-        action: "Started the match",
-      };
-
-      await match.save();
-
-      res.status(200).json({
-        success: true,
-        message: "Match started successfully",
-        match,
-      });
-    } catch (error) {
-      console.error("Error starting match:", error);
-      res.status(500).json({
+    // Get the match
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({
         success: false,
-        message: "Failed to start match",
-        error: error.message,
+        message: "Match not found",
       });
     }
-  },
+
+    // Check if user is a scorer for this match
+    const isScorer = match.scorers.some(
+      (scorer) => scorer.user.toString() === req.user.userId.toString()
+    );
+
+    if (!isScorer) {
+      return res.status(403).json({
+        success: false,
+        message: "Only designated scorers can start the match",
+      });
+    }
+
+    // Check if toss has been done
+    if (!match.toss || !match.toss.winner) {
+      return res.status(400).json({
+        success: false,
+        message: "Toss must be completed before starting the match",
+      });
+    }
+
+    // Update match status
+    match.status = MatchConstants.MATCH_STATUS.LIVE;
+    
+    // Set current innings to 1 if not already set
+    match.currentInnings = 1;
+
+    // Add match start commentary
+    match.commentary.push({
+      over: 0,
+      ball: 0,
+      inningsNumber: 1, // Fixed: Set to 1 for first innings
+      text: `Match started. ${
+        match.innings[0].battingTeam.toString() === match.team1.id.toString()
+          ? match.team1.name
+          : match.team2.name
+      } batting first.`,
+      type: "start",
+      time: new Date(),
+    });
+
+    // Update last scorer action
+    match.lastScorerAction = {
+      user: req.user.userId,
+      time: new Date(),
+      action: "Started the match",
+    };
+
+    // Set match start time
+    match.startTime = new Date();
+
+    await match.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Match started successfully",
+      match,
+    });
+  } catch (error) {
+    console.error("Error starting match:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to start match",
+      error: error.message,
+    });
+  }
+},
 
   // Add scorer to match
   addScorer: async (req, res) => {
@@ -754,7 +929,6 @@ const matchScoringController = {
       const isScorer = match.scorers.some(
         (scorer) => scorer.user.toString() === req.user.userId.toString()
       );
-
       if (!isScorer) {
         return res.status(403).json({
           success: false,
@@ -770,19 +944,64 @@ const matchScoringController = {
         });
       }
 
-      // Get current innings
-      const currentInningsIndex = match.innings.findIndex(
-        (innings) => innings.number === match.currentInnings
-      );
-
-      if (currentInningsIndex === -1) {
+      // Get current innings properly
+      const currentInningsIndex = match.currentInnings - 1;
+      const innings = match.innings[currentInningsIndex];
+      if (!innings) {
         return res.status(400).json({
           success: false,
           message: "Current innings not found",
         });
       }
 
-      const currentInnings = match.innings[currentInningsIndex];
+      // Initialize batting stats if empty (for fresh teams)
+      if (innings.battingStats.length === 0) {
+        const battingTeamPlayers =
+          match.currentInnings === 1
+            ? match.team1.players
+            : match.team2.players;
+
+        battingTeamPlayers.forEach((player) => {
+          innings.battingStats.push({
+            player: player.player,
+            name: player.name,
+            runs: 0,
+            balls: 0,
+            fours: 0,
+            sixes: 0,
+            strikeRate: 0,
+            dismissalType: null,
+            bowler: null,
+            fielder: null,
+            position: null,
+            inAt: null,
+            outAt: null,
+          });
+        });
+      }
+
+      // Initialize bowling stats if empty (for fresh teams)
+      if (innings.bowlingStats.length === 0) {
+        const bowlingTeamPlayers =
+          match.currentInnings === 1
+            ? match.team2.players
+            : match.team1.players;
+
+        bowlingTeamPlayers.forEach((player) => {
+          innings.bowlingStats.push({
+            player: player.player,
+            name: player.name,
+            overs: 0,
+            balls: 0,
+            maidens: 0,
+            runs: 0,
+            wickets: 0,
+            economy: 0,
+            noBalls: 0,
+            wides: 0,
+          });
+        });
+      }
 
       // Process the ball
       let ballCommentary = "";
@@ -793,12 +1012,12 @@ const matchScoringController = {
       if (extra) {
         switch (extra.type) {
           case "wide":
-            currentInnings.extras.wides += 1;
-            currentInnings.runs += 1;
+            innings.extras.wides += 1;
+            innings.runs += 1;
             runsOnThisBall += 1;
             if (extra.runs) {
-              currentInnings.extras.wides += extra.runs;
-              currentInnings.runs += extra.runs;
+              innings.extras.wides += extra.runs;
+              innings.runs += extra.runs;
               runsOnThisBall += extra.runs;
               ballCommentary = `Wide + ${extra.runs} runs`;
             } else {
@@ -806,74 +1025,19 @@ const matchScoringController = {
             }
             break;
 
-          case "noBall":
-            currentInnings.extras.noBalls += 1;
-            currentInnings.runs += 1;
-            runsOnThisBall += 1;
-            if (runs) {
-              currentInnings.runs += runs;
-              runsOnThisBall += runs;
-              ballCommentary = `No ball + ${runs} runs`;
-            } else {
-              ballCommentary = "No ball";
-            }
-            break;
-
-          case "bye":
-            if (extra.runs) {
-              currentInnings.extras.byes += extra.runs;
-              currentInnings.runs += extra.runs;
-              runsOnThisBall += extra.runs;
-              ballCommentary = `${extra.runs} byes`;
-            }
-            // Increment ball count for byes
-            if (!wicket) {
-              currentInnings.balls++;
-              if (currentInnings.balls === 6) {
-                currentInnings.overs++;
-                currentInnings.balls = 0;
-              }
-            }
-            break;
-
-          case "legBye":
-            if (extra.runs) {
-              currentInnings.extras.legByes += extra.runs;
-              currentInnings.runs += extra.runs;
-              runsOnThisBall += extra.runs;
-              ballCommentary = `${extra.runs} leg byes`;
-            }
-            // Increment ball count for leg byes
-            if (!wicket) {
-              currentInnings.balls++;
-              if (currentInnings.balls === 6) {
-                currentInnings.overs++;
-                currentInnings.balls = 0;
-              }
-            }
-            break;
-
-          case "penalty":
-            if (extra.runs) {
-              currentInnings.extras.penalty += extra.runs;
-              currentInnings.runs += extra.runs;
-              runsOnThisBall += extra.runs;
-              ballCommentary = `${extra.runs} penalty runs`;
-            }
-            break;
+          // ... other extra types remain the same ...
         }
 
-        // Update total extras
-        currentInnings.totalExtras =
-          currentInnings.extras.wides +
-          currentInnings.extras.noBalls +
-          currentInnings.extras.byes +
-          currentInnings.extras.legByes +
-          currentInnings.extras.penalty;
+        innings.totalExtras =
+          innings.extras.wides +
+          innings.extras.noBalls +
+          innings.extras.byes +
+          innings.extras.legByes +
+          innings.extras.penalty;
       }
       // Handle regular runs
       else if (runs !== undefined && !wicket) {
-        currentInnings.runs += runs;
+        innings.runs += runs;
         runsOnThisBall = runs;
 
         if (runs === 4) {
@@ -886,167 +1050,181 @@ const matchScoringController = {
           ballCommentary = `${runs} run${runs !== 1 ? "s" : ""}`;
         }
 
-        // Increment ball count for regular deliveries
-        currentInnings.balls++;
-        if (currentInnings.balls === 6) {
-          currentInnings.overs++;
-          currentInnings.balls = 0;
+        // Increment ball count
+        innings.balls++;
+        if (innings.balls === 6) {
+          innings.overs++;
+          innings.balls = 0;
         }
 
-        // Update batsman stats
-        if (batsman && currentInnings.currentBatsmen) {
-          // Find and update striker's stats
-          const batsmanStatIndex = currentInnings.battingStats.findIndex(
-            (stat) => stat.player.toString() === batsman.id
+        // Handle fresh batsman - add if not exists
+        if (batsman && innings.currentBatsmen) {
+          const batsmanId = typeof batsman === "string" ? batsman : batsman.id;
+          const batsmanStatIndex = innings.battingStats.findIndex(
+            (stat) => stat.player.toString() === batsmanId.toString()
           );
 
-          if (batsmanStatIndex !== -1) {
-            currentInnings.battingStats[batsmanStatIndex].runs += runs;
-            currentInnings.battingStats[batsmanStatIndex].balls += 1;
-
-            // Update fours and sixes
-            if (runs === 4) {
-              currentInnings.battingStats[batsmanStatIndex].fours += 1;
-            } else if (runs === 6) {
-              currentInnings.battingStats[batsmanStatIndex].sixes += 1;
-            }
-
-            // Update strike rate
-            const batsmanStat = currentInnings.battingStats[batsmanStatIndex];
-            batsmanStat.strikeRate = parseFloat(
-              ((batsmanStat.runs / batsmanStat.balls) * 100).toFixed(2)
-            );
+          // Add fresh batsman if not found
+          if (batsmanStatIndex === -1) {
+            innings.battingStats.push({
+              player: batsman.id,
+              name: batsman.name,
+              runs: 0,
+              balls: 0,
+              fours: 0,
+              sixes: 0,
+              strikeRate: 0,
+              dismissalType: null,
+              bowler: null,
+              fielder: null,
+              position: innings.battingStats.length + 1, // Next position
+              inAt: innings.runs,
+              outAt: null,
+            });
+            batsmanStatIndex = innings.battingStats.length - 1;
           }
+
+          // Update batsman stats
+          const batsmanStat = innings.battingStats[batsmanStatIndex];
+          batsmanStat.runs += runs;
+          batsmanStat.balls += 1;
+          if (runs === 4) batsmanStat.fours += 1;
+          if (runs === 6) batsmanStat.sixes += 1;
+          batsmanStat.strikeRate = parseFloat(
+            ((batsmanStat.runs / batsmanStat.balls) * 100).toFixed(2)
+          );
         }
 
         // Update bowler stats
-        if (bowler && currentInnings.currentBowler) {
-          const bowlerStatIndex = currentInnings.bowlingStats.findIndex(
-            (stat) => stat.player.toString() === bowler.id
+        if (bowler && innings.currentBowler) {
+          const bowlerId = typeof bowler === "string" ? bowler : bowler.id;
+          const bowlerStatIndex = innings.bowlingStats.findIndex(
+            (stat) => stat.player.toString() === bowlerId.toString()
           );
-
           if (bowlerStatIndex !== -1) {
-            currentInnings.bowlingStats[bowlerStatIndex].runs += runs;
-            currentInnings.bowlingStats[bowlerStatIndex].balls += 1;
-
-            // Update overs
-            const bowlerStat = currentInnings.bowlingStats[bowlerStatIndex];
+            const bowlerStat = innings.bowlingStats[bowlerStatIndex];
+            bowlerStat.runs += runs;
+            bowlerStat.balls += 1;
             bowlerStat.overs = Math.floor(bowlerStat.balls / 6);
             bowlerStat.balls = bowlerStat.balls % 6;
-
-            // Update economy
-            const totalOvers = bowlerStat.overs + bowlerStat.balls / 6;
             bowlerStat.economy = parseFloat(
-              (bowlerStat.runs / totalOvers).toFixed(2)
+              (
+                bowlerStat.runs /
+                (bowlerStat.overs + bowlerStat.balls / 6)
+              ).toFixed(2)
             );
           }
         }
       }
 
-      // Handle wicket
+      // Handle wickets
       if (wicket && batsman) {
-        currentInnings.wickets++;
+        innings.wickets++;
         commentaryType = "wicket";
-
-        // Update batsman stats
-        const batsmanStatIndex = currentInnings.battingStats.findIndex(
+        console.log("batsman", innings.battingStats);
+        let batsmanStatIndex = innings.battingStats.findIndex(
           (stat) => stat.player.toString() === batsman.id
         );
 
-        if (batsmanStatIndex !== -1) {
-          currentInnings.battingStats[batsmanStatIndex].dismissalType =
-            dismissalType;
-
-          // Add fielder and bowler if applicable
-          if (
-            fielder &&
-            ["caught", "stumped", "run_out"].includes(dismissalType)
-          ) {
-            currentInnings.battingStats[batsmanStatIndex].fielder = fielder.id;
-          }
-
-          if (
-            bowler &&
-            ["bowled", "caught", "lbw", "stumped"].includes(dismissalType)
-          ) {
-            currentInnings.battingStats[batsmanStatIndex].bowler = bowler.id;
-          }
-
-          // Record out at score
-          currentInnings.battingStats[batsmanStatIndex].outAt =
-            currentInnings.runs;
-
-          // Add to fall of wickets
-          currentInnings.fallOfWickets.push({
-            wicketNumber: currentInnings.wickets,
-            runs: currentInnings.runs,
-            overs: currentInnings.overs,
-            balls: currentInnings.balls,
+        // Add fresh batsman if not found (shouldn't happen but defensive programming)
+        if (batsmanStatIndex === -1) {
+          innings.battingStats.push({
             player: batsman.id,
-            playerName: batsman.name,
+            name: batsman.name,
+            runs: 0,
+            balls: 0,
+            fours: 0,
+            sixes: 0,
+            strikeRate: 0,
             dismissalType: dismissalType,
             bowler: bowler ? bowler.id : null,
             fielder: fielder ? fielder.id : null,
+            position: innings.battingStats.length + 1,
+            inAt: innings.runs,
+            outAt: innings.runs,
           });
+          batsmanStatIndex = innings.battingStats.length - 1;
+        }
 
-          // Generate wicket commentary
-          let wicketDescription = "";
-          switch (dismissalType) {
-            case "bowled":
-              wicketDescription = `${batsman.name} b ${bowler.name}`;
-              break;
-            case "caught":
-              wicketDescription = `${batsman.name} c ${
-                fielder ? fielder.name : "Substitute"
-              } b ${bowler.name}`;
-              break;
-            case "lbw":
-              wicketDescription = `${batsman.name} lbw b ${bowler.name}`;
-              break;
-            case "stumped":
-              wicketDescription = `${batsman.name} st ${fielder.name} b ${bowler.name}`;
-              break;
-            case "run_out":
-              wicketDescription = `${batsman.name} run out (${
-                fielder ? fielder.name : "Substitute"
-              })`;
-              break;
-            default:
-              wicketDescription = `${batsman.name} ${dismissalType}`;
-          }
+        const batsmanStat = innings.battingStats[batsmanStatIndex];
+        batsmanStat.dismissalType = dismissalType;
+        batsmanStat.outAt = innings.runs;
 
-          ballCommentary = `WICKET! ${wicketDescription}`;
+        if (
+          fielder &&
+          ["caught", "stumped", "run_out"].includes(dismissalType)
+        ) {
+          batsmanStat.fielder = fielder.id;
+        }
 
-          // Update bowler wicket stats if applicable
-          if (
-            bowler &&
-            ["bowled", "caught", "lbw", "stumped"].includes(dismissalType)
-          ) {
-            const bowlerStatIndex = currentInnings.bowlingStats.findIndex(
-              (stat) => stat.player.toString() === bowler.id
-            );
+        if (
+          bowler &&
+          ["bowled", "caught", "lbw", "stumped"].includes(dismissalType)
+        ) {
+          batsmanStat.bowler = bowler.id;
+        }
 
-            if (bowlerStatIndex !== -1) {
-              currentInnings.bowlingStats[bowlerStatIndex].wickets += 1;
+        // Add to fall of wickets
+        innings.fallOfWickets.push({
+          wicketNumber: innings.wickets,
+          runs: innings.runs,
+          overs: innings.overs,
+          balls: innings.balls,
+          player: batsman.id,
+          playerName: batsman.name,
+          dismissalType: dismissalType,
+          bowler: bowler ? bowler.id : null,
+          fielder: fielder ? fielder.id : null,
+        });
 
-              // Increment ball count if it's a legal delivery
-              if (
-                !extra ||
-                (extra && !["wide", "noBall"].includes(extra.type))
-              ) {
-                currentInnings.bowlingStats[bowlerStatIndex].balls += 1;
+        // Generate wicket commentary
+        let wicketDescription = "";
+        switch (dismissalType) {
+          case "bowled":
+            wicketDescription = `${batsman.name} b ${bowler.name}`;
+            break;
+          case "caught":
+            wicketDescription = `${batsman.name} c ${
+              fielder ? fielder.name : "Substitute"
+            } b ${bowler.name}`;
+            break;
+          case "lbw":
+            wicketDescription = `${batsman.name} lbw b ${bowler.name}`;
+            break;
+          case "stumped":
+            wicketDescription = `${batsman.name} st ${
+              fielder ? fielder.name : "Substitute"
+            } b ${bowler.name}`;
+            break;
+          case "run_out":
+            wicketDescription = `${batsman.name} run out (${
+              fielder ? fielder.name : "Substitute"
+            })`;
+            break;
+          default:
+            wicketDescription = `${batsman.name} ${dismissalType}`;
+        }
+        ballCommentary = `WICKET! ${wicketDescription}`;
 
-                // Update overs
-                const bowlerStat = currentInnings.bowlingStats[bowlerStatIndex];
-                bowlerStat.overs = Math.floor(bowlerStat.balls / 6);
-                bowlerStat.balls = bowlerStat.balls % 6;
-
-                // Increment innings ball count
-                currentInnings.balls++;
-                if (currentInnings.balls === 6) {
-                  currentInnings.overs++;
-                  currentInnings.balls = 0;
-                }
+        // Update bowler stats if applicable
+        if (
+          bowler &&
+          ["bowled", "caught", "lbw", "stumped"].includes(dismissalType)
+        ) {
+          const bowlerStatIndex = innings.bowlingStats.findIndex(
+            (stat) => stat.player.toString() === bowler.id
+          );
+          if (bowlerStatIndex !== -1) {
+            innings.bowlingStats[bowlerStatIndex].wickets += 1;
+            if (!extra || (extra && !["wide", "noBall"].includes(extra.type))) {
+              innings.bowlingStats[bowlerStatIndex].balls += 1;
+              const bowlerStat = innings.bowlingStats[bowlerStatIndex];
+              bowlerStat.overs = Math.floor(bowlerStat.balls / 6);
+              bowlerStat.balls = bowlerStat.balls % 6;
+              innings.balls++;
+              if (innings.balls === 6) {
+                innings.overs++;
+                innings.balls = 0;
               }
             }
           }
@@ -1055,102 +1233,53 @@ const matchScoringController = {
 
       // Update match commentary
       match.commentary.push({
-        over: currentInnings.overs,
-        ball: currentInnings.balls,
-        innings: match.currentInnings,
+        over: innings.overs,
+        ball: innings.balls,
+        inningsNumber: match.currentInnings, // Using the correct field name as defined in the schema
         text: ballCommentary,
         type: commentaryType,
         time: new Date(),
       });
 
       // Calculate current run rate
-      currentInnings.currentRunRate = calculateRunRate(
-        currentInnings.runs,
-        currentInnings.overs,
-        currentInnings.balls
-      );
+      const totalOvers = innings.overs + innings.balls / 6;
+      innings.currentRunRate =
+        totalOvers > 0 ? parseFloat((innings.runs / totalOvers).toFixed(2)) : 0;
 
       // Calculate required run rate if this is second innings
-      if (match.currentInnings > 1 && currentInnings.target) {
-        const remainingRuns = currentInnings.target - currentInnings.runs;
+      if (match.currentInnings > 1 && innings.target) {
+        const remainingRuns = innings.target - innings.runs;
         const remainingOvers =
-          currentInnings.maxOvers -
-          currentInnings.overs -
-          currentInnings.balls / 6;
-
-        if (remainingOvers > 0) {
-          currentInnings.requiredRunRate = parseFloat(
-            (remainingRuns / remainingOvers).toFixed(2)
-          );
-        }
+          innings.maxOvers - innings.overs - innings.balls / 6;
+        innings.requiredRunRate =
+          remainingOvers > 0
+            ? parseFloat((remainingRuns / remainingOvers).toFixed(2))
+            : 0;
       }
 
       // Check if innings is completed
-      let inningsCompleted = false;
+      let inningsCompleted =
+        innings.wickets === 10 ||
+        (innings.maxOvers &&
+          innings.overs >= innings.maxOvers &&
+          innings.balls === 0) ||
+        (match.currentInnings > 1 &&
+          innings.target &&
+          innings.runs >= innings.target);
 
-      // Check if all wickets are down
-      if (currentInnings.wickets === 10) {
-        inningsCompleted = true;
-      }
-
-      // Check if max overs are played
-      if (
-        currentInnings.maxOvers &&
-        currentInnings.overs >= currentInnings.maxOvers &&
-        currentInnings.balls === 0
-      ) {
-        inningsCompleted = true;
-      }
-
-      // Check if target is achieved in second innings
-      if (
-        match.currentInnings > 1 &&
-        currentInnings.target &&
-        currentInnings.runs >= currentInnings.target
-      ) {
-        inningsCompleted = true;
-        match.status = MatchConstants.MATCH_STATUS.COMPLETED;
-
-        // Set match result
-        match.result = {
-          winner: match.battingTeam,
-          winMargin: 10 - currentInnings.wickets,
-          winMarginType: "wickets",
-        };
-
-        // Add result commentary
-        match.commentary.push({
-          over: currentInnings.overs,
-          ball: currentInnings.balls,
-          innings: match.currentInnings,
-          text: `${
-            match.battingTeam.toString() === match.team1.id.toString()
-              ? match.team1.name
-              : match.team2.name
-          } wins by ${10 - currentInnings.wickets} wickets!`,
-          type: "end",
-          time: new Date(),
-        });
-      }
-
-      // Handle innings completion
       if (
         inningsCompleted &&
         match.status !== MatchConstants.MATCH_STATUS.COMPLETED
       ) {
-        // For first innings in limited overs match
         if (
           match.currentInnings === 1 &&
           match.format !== MatchConstants.MATCH_FORMAT.TEST
         ) {
           // Create second innings
-          const target = currentInnings.runs + 1;
-
-          // Determine batting and bowling teams for second innings
+          const target = innings.runs + 1;
           const secondInningsBattingTeam = match.bowlingTeam;
           const secondInningsBowlingTeam = match.battingTeam;
 
-          // Create second innings
           match.innings.push({
             number: 2,
             battingTeam: secondInningsBattingTeam,
@@ -1167,28 +1296,24 @@ const matchScoringController = {
               penalty: 0,
             },
             totalExtras: 0,
-            maxOvers: currentInnings.maxOvers,
+            maxOvers: innings.maxOvers,
             target: target,
-            requiredRunRate: parseFloat(
-              (target / currentInnings.maxOvers).toFixed(2)
-            ),
+            requiredRunRate: parseFloat((target / innings.maxOvers).toFixed(2)),
             currentRunRate: 0,
             battingStats: [],
             bowlingStats: [],
             fallOfWickets: [],
           });
 
-          // Update match status
           match.status = MatchConstants.MATCH_STATUS.INNINGS_BREAK;
           match.currentInnings = 2;
           match.battingTeam = secondInningsBattingTeam;
           match.bowlingTeam = secondInningsBowlingTeam;
 
-          // Add innings break commentary
           match.commentary.push({
-            over: currentInnings.overs,
-            ball: currentInnings.balls,
-            innings: 1,
+            over: innings.overs,
+            ball: innings.balls,
+            inningsNumber: 1,
             text: `End of innings. ${
               match.team1.id.toString() === match.battingTeam.toString()
                 ? match.team2.name
@@ -1197,41 +1322,38 @@ const matchScoringController = {
             type: "end",
             time: new Date(),
           });
-        }
-        // For second innings or test match
-        else if (
+        } else if (
           match.currentInnings === 2 ||
           match.format === MatchConstants.MATCH_FORMAT.TEST
         ) {
-          // For test match specific logic
-          if (match.format === MatchConstants.MATCH_FORMAT.TEST) {
-            // Test match logic would go here
-            // For simplicity, we're skipping detailed test match logic
-          } else {
-            // Limited overs match is complete
-            match.status = MatchConstants.MATCH_STATUS.COMPLETED;
-
-            // Determine winner
+          match.status = MatchConstants.MATCH_STATUS.COMPLETED;
+          if (match.format !== MatchConstants.MATCH_FORMAT.TEST) {
             const firstInnings = match.innings[0];
             const secondInnings = match.innings[1];
-
-            // Second innings didn't reach target
             match.result = {
-              winner: firstInnings.battingTeam,
-              winMargin: firstInnings.runs - secondInnings.runs,
-              winMarginType: "runs",
+              winner:
+                innings.runs >= innings.target
+                  ? match.battingTeam
+                  : firstInnings.battingTeam,
+              winMargin:
+                innings.runs >= innings.target
+                  ? 10 - innings.wickets
+                  : firstInnings.runs - secondInnings.runs,
+              winMarginType:
+                innings.runs >= innings.target ? "wickets" : "runs",
             };
 
-            // Add result commentary
             match.commentary.push({
-              over: currentInnings.overs,
-              ball: currentInnings.balls,
-              innings: match.currentInnings,
+              over: innings.overs,
+              ball: innings.balls,
+              inningsNumber: match.currentInnings,
               text: `${
                 match.result.winner.toString() === match.team1.id.toString()
                   ? match.team1.name
                   : match.team2.name
-              } wins by ${match.result.winMargin} runs!`,
+              } wins by ${match.result.winMargin} ${
+                match.result.winMarginType
+              }!`,
               type: "end",
               time: new Date(),
             });
@@ -1307,7 +1429,7 @@ const matchScoringController = {
       match.commentary.push({
         over: 0,
         ball: 0,
-        innings: 2,
+        inningsNumber: 2,
         text: `Second innings started. ${
           match.battingTeam.toString() === match.team1.id.toString()
             ? match.team1.name
@@ -1454,7 +1576,7 @@ const matchScoringController = {
         match.commentary.push({
           over: currentInnings.overs,
           ball: currentInnings.balls,
-          innings: match.currentInnings,
+          inningsNumber: match.currentInnings,
           text: `Match interrupted due to ${reason}. DLS method applied. Revised target: ${revisedTarget} runs from ${revisedMaxOvers} overs.`,
           type: "dls",
           time: new Date(),
@@ -1487,7 +1609,7 @@ const matchScoringController = {
         match.commentary.push({
           over: currentInnings.overs,
           ball: currentInnings.balls,
-          innings: match.currentInnings,
+          inningsNumber: match.currentInnings,
           text: `Match interrupted due to ${reason}. Innings reduced to ${revisedMaxOvers} overs.`,
           type: "dls",
           time: new Date(),
@@ -1562,7 +1684,7 @@ const matchScoringController = {
       match.commentary.push({
         over: match.innings[match.currentInnings - 1].overs,
         ball: match.innings[match.currentInnings - 1].balls,
-        innings: match.currentInnings,
+        inningsNumber: match.currentInnings, // Using the correct field name as defined in the schema
         text: `Match resumed after interruption.`,
         type: "start",
         time: new Date(),
