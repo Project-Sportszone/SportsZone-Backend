@@ -72,11 +72,9 @@ const teamController = {
 
       // Check if team has at least one member (plus the owner/admin)
       if (team.members.length < 2) {
-        return res
-          .status(400)
-          .json({
-            error: "Team must have at least one member besides the owner",
-          });
+        return res.status(400).json({
+          error: "Team must have at least one member besides the owner",
+        });
       }
 
       // Update team creation step
@@ -140,11 +138,9 @@ const teamController = {
 
       // Captain and vice-captain cannot be the same person
       if (captainId === viceCaptainId) {
-        return res
-          .status(400)
-          .json({
-            error: "Captain and vice-captain cannot be the same person",
-          });
+        return res.status(400).json({
+          error: "Captain and vice-captain cannot be the same person",
+        });
       }
 
       // Assign captain and vice-captain
@@ -251,6 +247,193 @@ const teamController = {
     }
   },
 
+  assignAdmin: async (req, res) => {
+    try {
+      const { adminId } = req.body;
+      const team = await Team.findById(req.params.id);
+
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      // Check if the user is the owner
+      if (team.owner.toString() !== req.user.userId.toString()) {
+        return res
+          .status(403)
+          .json({ error: "Only the owner can assign an admin" });
+      }
+
+      // Validate if the admin is a team member
+      const isMember = team.members.some(
+        (member) => member.user.toString() === adminId
+      );
+
+      if (!isMember) {
+        return res.status(400).json({ error: "Admin must be a team member" });
+      }
+
+      // Assign admin role
+      team.members = team.members.map((member) => {
+        if (member.user.toString() === adminId) {
+          member.role = "admin";
+        }
+        return member;
+      });
+
+      await team.save();
+      res.json({ success: true, message: "Admin assigned successfully", team });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Add or remove players later
+  updateTeamPlayers: async (req, res) => {
+    try {
+      const { action, userId } = req.body; // action: "add" or "remove"
+      const team = await Team.findById(req.params.id);
+
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      // Check if the user has permission (must be admin or owner)
+      const isOwner = team.owner.toString() === req.user.userId.toString();
+      const isAdmin = team.members.some(
+        (member) =>
+          member.user.toString() === req.user.userId.toString() &&
+          member.role === "admin"
+      );
+
+      if (!isOwner && !isAdmin) {
+        return res
+          .status(403)
+          .json({ error: "No permission to update team players" });
+      }
+
+      if (action === "add") {
+        // Check if the team already has 11 players
+        if (team.members.length >= 11) {
+          return res
+            .status(400)
+            .json({ error: "Team cannot have more than 11 players" });
+        }
+
+        // Check if the user to be added exists
+        const userToAdd = await User.findById(userId);
+        if (!userToAdd) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        // Check if the user is already a member
+        const isMember = team.members.some(
+          (member) => member.user.toString() === userId
+        );
+
+        if (isMember) {
+          return res
+            .status(400)
+            .json({ error: "User is already a team member" });
+        }
+
+        // Add the user to the team
+        team.members.push({
+          user: userId,
+          role: "member",
+          joinedAt: new Date(),
+        });
+      } else if (action === "remove") {
+        // Check if the user is a captain, vice-captain, or admin
+        if (
+          team.captain?.toString() === userId ||
+          team.viceCaptain?.toString() === userId ||
+          team.owner.toString() === userId
+        ) {
+          return res.status(400).json({
+            error: "Cannot remove the captain, vice-captain, or owner",
+          });
+        }
+
+        // Remove the user from the team
+        team.members = team.members.filter(
+          (member) => member.user.toString() !== userId
+        );
+      } else {
+        return res.status(400).json({ error: "Invalid action" });
+      }
+
+      await team.save();
+      res.json({ success: true, message: "Team updated successfully", team });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Update captain and vice-captain later
+  updateCaptains: async (req, res) => {
+    try {
+      const { captainId, viceCaptainId } = req.body;
+      const team = await Team.findById(req.params.id);
+
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      // Check if the user has permission (must be admin or owner)
+      const isOwner = team.owner.toString() === req.user.userId.toString();
+      const isAdmin = team.members.some(
+        (member) =>
+          member.user.toString() === req.user.userId.toString() &&
+          member.role === "admin"
+      );
+
+      if (!isOwner && !isAdmin) {
+        return res
+          .status(403)
+          .json({ error: "No permission to update captains" });
+      }
+
+      // Validate captain and vice-captain are team members
+      const isCaptainMember = team.members.some(
+        (member) => member.user.toString() === captainId
+      );
+
+      const isViceCaptainMember = team.members.some(
+        (member) => member.user.toString() === viceCaptainId
+      );
+
+      if (!isCaptainMember) {
+        return res.status(400).json({ error: "Captain must be a team member" });
+      }
+
+      if (!isViceCaptainMember) {
+        return res
+          .status(400)
+          .json({ error: "Vice-captain must be a team member" });
+      }
+
+      // Captain and vice-captain cannot be the same person
+      if (captainId === viceCaptainId) {
+        return res.status(400).json({
+          error: "Captain and vice-captain cannot be the same person",
+        });
+      }
+
+      // Update captain and vice-captain
+      team.captain = captainId;
+      team.viceCaptain = viceCaptainId;
+
+      await team.save();
+      res.json({
+        success: true,
+        message: "Captains updated successfully",
+        team,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   // Get the teams
 
   getAvailaibleTeams: async (req, res) => {
@@ -288,9 +471,24 @@ const teamController = {
       res.status(500).json({ error: error.message });
     }
   },
+  // Add a user directly to team by email (modified to work with step system)
+  // Add a user directly to team by email (modified to work with step system)
+  getUserTeams: async (req, res) => {
+    try {
+      // Find teams where user is either owner or member
+      const teams = await Team.find({
+        $or: [{ owner: req.user.userId }, { "members.user": req.user.userId }],
+      })
+        .populate("owner", "name email")
+        .populate("members.user", "name email")
+        .populate("captain", "name email")
+        .populate("viceCaptain", "name email");
 
-  // Add a user directly to team by email (modified to work with step system)
-  // Add a user directly to team by email (modified to work with step system)
+      res.json(teams);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
   addTeamMember: async (req, res) => {
     try {
       const { email, role = "member" } = req.body;
@@ -315,19 +513,17 @@ const teamController = {
       }
 
       // Check if team is in the right step to add members
-      if (team.creationStep > TEAM_CREATION_STEPS.MEMBERS_ADDED) {
-        return res
-          .status(400)
-          .json({ error: "Cannot add members after captain assignment" });
-      }
+      // if (team.creationStep > TEAM_CREATION_STEPS.MEMBERS_ADDED) {
+      //   return res
+      //     .status(400)
+      //     .json({ error: "Cannot add members after captain assignment" });
+      // }
 
       // Check if team has reached maximum members limit
       if (team.members.length >= MAX_TEAM_MEMBERS) {
-        return res
-          .status(400)
-          .json({
-            error: `Team cannot have more than ${MAX_TEAM_MEMBERS} members`,
-          });
+        return res.status(400).json({
+          error: `Team cannot have more than ${MAX_TEAM_MEMBERS} members`,
+        });
       }
 
       // Verify the user to be added exists by email
@@ -433,7 +629,89 @@ const teamController = {
       res.status(500).json({ error: error.message });
     }
   },
+  getOwnedTeams: async (req, res) => {
+    try {
+      // Find teams where the user is the owner
+      const teams = await Team.find({ owner: req.user.userId })
+        .populate("owner", "name email")
+        .populate("members.user", "name email")
+        .populate("captain", "name email")
+        .populate("viceCaptain", "name email");
 
+      res.json(teams);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  getTeamMembers: async (req, res) => {
+    try {
+      const team = await Team.findById(req.params.id).populate(
+        "members.user",
+        "name email role"
+      );
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      // Check if the user is authorized to view team members
+      const isMember = team.members.some(
+        (member) => member.user._id.toString() === req.user.userId.toString()
+      );
+      const isOwner = team.owner.toString() === req.user.userId.toString();
+
+      if (!isMember && !isOwner) {
+        return res
+          .status(403)
+          .json({ error: "Not authorized to view team members" });
+      }
+
+      res.json(team.members);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+  changeAdmin: async (req, res) => {
+    try {
+      const { adminId } = req.body;
+      const team = await Team.findById(req.params.id);
+
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      // Check if the requester is the owner
+      if (team.owner.toString() !== req.user.userId.toString()) {
+        return res
+          .status(403)
+          .json({ error: "Only the owner can change the admin" });
+      }
+
+      // Validate if the new admin is a team member
+      const isMember = team.members.some(
+        (member) => member.user.toString() === adminId
+      );
+
+      if (!isMember) {
+        return res.status(400).json({ error: "Admin must be a team member" });
+      }
+
+      // Update the admin role
+      team.members = team.members.map((member) => {
+        if (member.user.toString() === adminId) {
+          member.role = "admin";
+        } else if (member.role === "admin") {
+          member.role = "member"; // Demote the previous admin
+        }
+        return member;
+      });
+
+      await team.save();
+      res.json({ success: true, message: "Admin updated successfully", team });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
   // Get team details
   getTeamDetails: async (req, res) => {
     try {

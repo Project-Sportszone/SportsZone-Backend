@@ -98,74 +98,275 @@ const matchController = {
   },
 
   // Update match score
-  updateMatchScore: async (req, res) => {
-    try {
-      const matchId = req.params.id;
-      const { teamId, runs, wickets, overs } = req.body;
+  // updateMatchScore: async (req, res) => {
+  //   try {
+  //     const matchId = req.params.id;
+  //     const { teamId, runs, wickets, overs } = req.body;
       
-      // Validate request
-      if (!teamId || (runs === undefined && wickets === undefined && overs === undefined)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid score update data"
-        });
-      }
+  //     // Validate request
+  //     if (!teamId || (runs === undefined && wickets === undefined && overs === undefined)) {
+  //       return res.status(400).json({
+  //         success: false,
+  //         message: "Invalid score update data"
+  //       });
+  //     }
       
-      // Find the match
-      const match = await Match.findById(matchId);
-      if (!match) {
-        return res.status(404).json({
-          success: false,
-          message: "Match not found"
-        });
-      }
+  //     // Find the match
+  //     const match = await Match.findById(matchId);
+  //     if (!match) {
+  //       return res.status(404).json({
+  //         success: false,
+  //         message: "Match not found"
+  //       });
+  //     }
       
-      // Check if user has permission to update (match creator or team owner)
-      if (match.createdBy.toString() !== req.user.id) {
-        return res.status(403).json({
-          success: false,
-          message: "Unauthorized to update this match score"
-        });
-      }
+  //     // Check if user has permission to update (match creator or team owner)
+  //     // if (match.createdBy.toString() !== req.user.id) {
+  //     //   return res.status(403).json({
+  //     //     success: false,
+  //     //     message: "Unauthorized to update this match score"
+  //     //   });
+  //     // }
       
-      // Check which team to update
-      const teamKey = match.team1Id.toString() === teamId ? "team1" : 
-                     match.team2Id.toString() === teamId ? "team2" : null;
+  //     // Check which team to update
+  //     const teamKey = match.team1Id.toString() === teamId ? "team1" : 
+  //                    match.team2Id.toString() === teamId ? "team2" : null;
       
-      if (!teamKey) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid team ID for this match"
-        });
-      }
+  //     if (!teamKey) {
+  //       return res.status(400).json({
+  //         success: false,
+  //         message: "Invalid team ID for this match"
+  //       });
+  //     }
       
-      // Create update object
-      const updateData = {};
+  //     // Create update object
+  //     const updateData = {};
       
-      if (runs !== undefined) updateData[`scores.${teamKey}.runs`] = runs;
-      if (wickets !== undefined) updateData[`scores.${teamKey}.wickets`] = wickets;
-      if (overs !== undefined) updateData[`scores.${teamKey}.overs`] = overs;
+  //     if (runs !== undefined) updateData[`scores.${teamKey}.runs`] = runs;
+  //     if (wickets !== undefined) updateData[`scores.${teamKey}.wickets`] = wickets;
+  //     if (overs !== undefined) updateData[`scores.${teamKey}.overs`] = overs;
       
-      // Update match in database
-      const updatedMatch = await Match.findByIdAndUpdate(
-        matchId,
-        { $set: updateData },
-        { new: true, runValidators: true }
-      );
+  //     // Update match in database
+  //     const updatedMatch = await Match.findByIdAndUpdate(
+  //       matchId,
+  //       { $set: updateData },
+  //       { new: true, runValidators: true }
+  //     );
       
-      res.status(200).json({
-        success: true,
-        message: "Match score updated successfully",
-        match: updatedMatch
-      });
-    } catch (error) {
-      console.error("Error updating match score:", error);
-      res.status(500).json({
+  //     res.status(200).json({
+  //       success: true,
+  //       message: "Match score updated successfully",
+  //       match: updatedMatch
+  //     });
+  //   } catch (error) {
+  //     console.error("Error updating match score:", error);
+  //     res.status(500).json({
+  //       success: false,
+  //       message: "Failed to update match score"
+  //     });
+  //   }
+  // },
+//   updateMatchScore: async (req, res) => {
+//     try {
+//       const matchId = req.params.id;
+//       const { teamId, runs, wickets, overs } = req.body;
+      
+//       // Validate request
+//       if (!teamId || (runs === undefined && wickets === undefined && overs === undefined)) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Invalid score update data"
+//         });
+//       }
+      
+//       // Find the match and populate team details
+//       const match = await Match.findById(matchId);
+//       if (!match) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "Match not found"
+//         });
+//       }
+// console.log("match.team1",match.team1);
+// console.log("match.team2",match.team2);
+// console.log("teamId",teamId);
+// console.log("match.team1 equals",match.team1.id.equals(teamId));
+// console.log("match.team2 equals",match.team2.id.equals(teamId));
+
+//       // Check which team to update using team reference comparison
+//       const teamKey = match.team1 && match.team1.id.equals(teamId) ? "team1" : 
+//                      match.team2 && match.team2.id.equals(teamId) ? "team2" : null;
+//       console.log("TeamKey",teamKey);
+//       if (!teamKey) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Invalid team ID for this match"
+//         });
+//       }
+      
+//       // Create update object
+//       const updateData = {};
+      
+//       if (runs !== undefined) updateData[`innings.${match.currentInnings - 1}.runs`] = runs;
+//       if (wickets !== undefined) updateData[`innings.${match.currentInnings - 1}.wickets`] = wickets;
+//       if (overs !== undefined) updateData[`innings.${match.currentInnings - 1}.overs`] = overs;
+      
+//       // Update match in database
+//       const updatedMatch = await Match.findByIdAndUpdate(
+//         matchId,
+//         { $set: updateData },
+//         { new: true, runValidators: true }
+//       );
+      
+//       res.status(200).json({
+//         success: true,
+//         message: "Match score updated successfully",
+//         match: updatedMatch
+//       });
+//     } catch (error) {
+//       console.error("Error updating match score:", error);
+//       res.status(500).json({
+//         success: false,
+//         message: "Failed to update match score",
+//         error: error.message
+//       });
+//     }
+//   },  
+updateMatchScore: async (req, res) => {
+  try {
+    const matchId = req.params.id;
+    const { teamId, runs, wickets, overs, wicket, dismissalType, fielder } = req.body;
+    
+    // Find the match and populate team details
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({
         success: false,
-        message: "Failed to update match score"
+        message: "Match not found"
       });
     }
-  },
+
+    // Get current innings
+    const currentInningsIndex = match.currentInnings - 1;
+    const currentInnings = match.innings[currentInningsIndex];
+
+    // Calculate new totals
+    const newRuns = currentInnings.runs + (runs || 0);
+    const newWickets = currentInnings.wickets + (wickets || 0);
+    const currentBalls = (currentInnings.overs * 6) + currentInnings.balls;
+    let newBalls;
+    
+    // Only increment balls for valid deliveries (not wides/no-balls)
+    if (!req.body.extra || (req.body.extra && !['wide', 'noBall'].includes(req.body.extra.type))) {
+      newBalls = currentBalls + 1;
+    } else {
+      newBalls = currentBalls;
+    }
+
+    // Calculate new overs and balls
+    const newOvers = Math.floor(newBalls / 6);
+    const remainingBalls = newBalls % 6;
+
+    // Create update object with accumulated values
+    const updateData = {
+      [`innings.${currentInningsIndex}.runs`]: newRuns,
+      [`innings.${currentInningsIndex}.wickets`]: newWickets,
+      [`innings.${currentInningsIndex}.overs`]: newOvers,
+      [`innings.${currentInningsIndex}.balls`]: remainingBalls
+    };
+
+    // Handle wicket details if present
+    if (wicket) {
+      const wicketDetails = {
+        batsman: req.body.batsman,
+        bowler: req.body.bowler,
+        dismissalType,
+        fielder: ['caught', 'stumped', 'run_out'].includes(dismissalType) ? fielder : undefined,
+        overNumber: newOvers,
+        ballNumber: remainingBalls,
+        score: newRuns
+      };
+
+      // Add wicket to fallOfWickets array
+      updateData[`innings.${currentInningsIndex}.fallOfWickets`] = [
+        ...(currentInnings.fallOfWickets || []),
+        wicketDetails
+      ];
+
+      // Update batting stats
+      const batsmanIndex = currentInnings.battingStats.findIndex(
+        stat => stat.player === req.body.batsman
+      );
+      if (batsmanIndex !== -1) {
+        updateData[`innings.${currentInningsIndex}.battingStats.${batsmanIndex}.dismissalType`] = dismissalType;
+        updateData[`innings.${currentInningsIndex}.battingStats.${batsmanIndex}.fielder`] = fielder;
+      }
+
+      // Update bowling stats if bowler's wicket
+      if (['bowled', 'lbw', 'caught', 'stumped'].includes(dismissalType)) {
+        const bowlerIndex = currentInnings.bowlingStats.findIndex(
+          stat => stat.player === req.body.bowler
+        );
+        if (bowlerIndex !== -1) {
+          updateData[`innings.${currentInningsIndex}.bowlingStats.${bowlerIndex}.wickets`] = 
+            (currentInnings.bowlingStats[bowlerIndex].wickets || 0) + 1;
+        }
+      }
+    }
+
+    // Calculate required run rate for second innings
+    if (match.currentInnings === 2) {
+      const target = match.innings[0].runs + 1;
+      const remainingRuns = target - newRuns;
+      const remainingBallsTotal = (20 * 6) - newBalls;
+      const requiredRunRate = (remainingRuns * 6) / remainingBallsTotal;
+
+      updateData[`innings.${currentInningsIndex}.requiredRunRate`] = requiredRunRate;
+      updateData[`innings.${currentInningsIndex}.target`] = target;
+    }
+
+    // Update match in database
+    const updatedMatch = await Match.findByIdAndUpdate(
+      matchId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).populate('team1 team2');
+
+    // Prepare detailed response
+    const updatedInnings = updatedMatch.innings[currentInningsIndex];
+    const scoringDetails = {
+      total: `${updatedInnings.runs}/${updatedInnings.wickets}`,
+      overs: `${updatedInnings.overs}.${updatedInnings.balls}`,
+      runRate: ((updatedInnings.runs * 6) / (newBalls || 1)).toFixed(2),
+      lastWicket: wicket ? {
+        batsman: req.body.batsman,
+        dismissalType,
+        fielder: fielder || undefined
+      } : undefined
+    };
+
+    if (match.currentInnings === 2) {
+      scoringDetails.target = updatedInnings.target;
+      scoringDetails.required = updatedInnings.target - updatedInnings.runs;
+      scoringDetails.requiredRunRate = updatedInnings.requiredRunRate?.toFixed(2);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Match score updated successfully",
+      match: updatedMatch,
+      currentInnings: scoringDetails
+    });
+
+  } catch (error) {
+    console.error("Error updating match score:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update match score",
+      error: error.message
+    });
+  }
+},
 
   // Update match status
   updateMatchStatus: async (req, res) => {

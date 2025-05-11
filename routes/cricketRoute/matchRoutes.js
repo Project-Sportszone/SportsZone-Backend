@@ -6,8 +6,6 @@ const axios = require("axios");
 // Import the controller for match operations
 const matchController = require("../../controller/cricketAPIController/matchController");
 
-
-
 // Get all matches
 router.get("/matches", authMiddleware, matchController.getAllMatches);
 
@@ -15,10 +13,14 @@ router.get("/matches", authMiddleware, matchController.getAllMatches);
 router.get("/matches/:id", authMiddleware, matchController.getMatchById);
 
 // Update match score
-// router.put("/matches/:id/score", authMiddleware, matchController.updateMatchScore);
+router.put("/matches/:id/score", authMiddleware, matchController.updateMatchScore);
 
 // Update match status (e.g., scheduled, in-progress, completed)
-router.put("/matches/:id/status", authMiddleware, matchController.updateMatchStatus);
+router.put(
+  "/matches/:id/status",
+  authMiddleware,
+  matchController.updateMatchStatus
+);
 
 // Delete a match (only by creator)
 router.delete("/matches/:id", authMiddleware, matchController.deleteMatch);
